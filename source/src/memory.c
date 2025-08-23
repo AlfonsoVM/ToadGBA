@@ -3614,28 +3614,14 @@ static s32 load_gamepak_raw(char *name)
       FILE_READ(gamepak_file, gamepak_rom, _gamepak_size);
       FILE_CLOSE(gamepak_file);
       
-      // Validate GBA ROM header - check for Nintendo logo at 0x04-0xA0
-      // At minimum, check the first 4 bytes after entry point
-      if (_gamepak_size >= 0x100) {
-        u8 *header = gamepak_rom + 0x04;
-        // Check for part of the Nintendo logo (known bytes)
-        if (header[0] != 0x24 || header[1] != 0xFF || header[2] != 0xAE || header[3] != 0x51) {
-          return -1;  // Not a valid GBA ROM
-        }
-      }
+      // Skip header validation for now - some homebrew or patched ROMs may not have valid headers
     }
     else
     {
       // Read in just enough for the header
       FILE_READ(gamepak_file, gamepak_rom, 0x100);
       
-      // Validate GBA ROM header for large files too
-      u8 *header = gamepak_rom + 0x04;
-      // Check for part of the Nintendo logo (known bytes)
-      if (header[0] != 0x24 || header[1] != 0xFF || header[2] != 0xAE || header[3] != 0x51) {
-        FILE_CLOSE(gamepak_file);
-        return -1;  // Not a valid GBA ROM
-      }
+      // Skip header validation for large files too - some homebrew or patched ROMs may not have valid headers
 
       gamepak_file_large = gamepak_file;
 
@@ -3719,6 +3705,12 @@ s32 load_gamepak(char *name)
     else
 		print_string_gbk(MSG[MSG_SEARCHING_BACKUP_ID], X_POS_CENTER, 148, COLOR15_WHITE, BG_NO_FILL);
     flip_screen(1);
+    
+    FILE *debug_early = fopen("early_debug.log", "w");
+    if (debug_early) {
+      fprintf(debug_early, "After flip_screen, file_size = %d\n", file_size);
+      fclose(debug_early);
+    }
   }
 
   if (file_size > 0)
