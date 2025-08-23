@@ -3045,13 +3045,6 @@ static void load_backup_id(void)
   u32 region = 0xFFFFFFFF;
   u32 new_region = 0;
   
-  FILE *debug_log = fopen("backup_id_debug.log", "w");
-  if (debug_log) {
-    fprintf(debug_log, "Starting backup ID scan\n");
-    fprintf(debug_log, "gamepak_size = 0x%X\n", gamepak_size);
-    fprintf(debug_log, "Starting addr = 0x%X\n", addr);
-    fflush(debug_log);
-  }
 
   init_memory_gamepak();
 
@@ -3067,10 +3060,6 @@ static void load_backup_id(void)
   for ( ; addr > 0x08000000; addr -= 4)
   {
     iterations++;
-    if (debug_log && (iterations % 100000) == 0) {
-      fprintf(debug_log, "Scanned %d addresses, current: 0x%X\n", iterations, addr);
-      fflush(debug_log);
-    }
     
     new_region = addr >> 15;
 
@@ -3097,10 +3086,6 @@ static void load_backup_id(void)
           memcpy(backup_id, data, 11);
           backup_id[11] = 0;
 */
-          if (debug_log) {
-            fprintf(debug_log, "Found EEPROM backup type\n");
-            fclose(debug_log);
-          }
           return;
         }
       }
@@ -3117,10 +3102,6 @@ static void load_backup_id(void)
           memcpy(backup_id, data, 9);
           backup_id[9] = 0;
 */
-          if (debug_log) {
-            fprintf(debug_log, "Found SRAM backup type\n");
-            fclose(debug_log);
-          }
           return;
         }
 
@@ -3133,10 +3114,6 @@ static void load_backup_id(void)
           memcpy(backup_id, data, 11);
           backup_id[11] = 0;
 */
-          if (debug_log) {
-            fprintf(debug_log, "Found FRAM backup type\n");
-            fclose(debug_log);
-          }
           return;
         }
       }
@@ -3155,10 +3132,6 @@ static void load_backup_id(void)
           memcpy(backup_id, data, 10);
           backup_id[10] = 0;
 */
-          if (debug_log) {
-            fprintf(debug_log, "Found FLASH_V backup type\n");
-            fclose(debug_log);
-          }
           return;
         }
 
@@ -3173,10 +3146,6 @@ static void load_backup_id(void)
           memcpy(backup_id, data, 13);
           backup_id[13] = 0;
 */
-          if (debug_log) {
-            fprintf(debug_log, "Found FLASH512 backup type\n");
-            fclose(debug_log);
-          }
           return;
         }
 
@@ -3191,20 +3160,11 @@ static void load_backup_id(void)
           memcpy(backup_id, data, 12);
           backup_id[12] = 0;
 */
-          if (debug_log) {
-            fprintf(debug_log, "Found FLASH1M backup type\n");
-            fclose(debug_log);
-          }
           return;
         }
       }
       break;
     }
-  }
-  
-  if (debug_log) {
-    fprintf(debug_log, "Backup ID scan completed - no backup ID found\n");
-    fclose(debug_log);
   }
 }
 
@@ -3467,9 +3427,6 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
     idle_loop_target_pc[idle_loop_targets++] = 0x8000a26;
   }
 
-  // TEMPORARILY DISABLED - game_config.txt parsing causing hangs
-  return -1;
-  
   sprintf(config_path, "%s%s", main_path, CONFIG_FILENAME);
 
   // Try to open the config file but don't hang if it doesn't exist
@@ -3646,11 +3603,6 @@ static s32 load_gamepak_raw(char *name)
 
 s32 load_gamepak(char *name)
 {
-  FILE *debug_log = fopen("froggba_debug.log", "a");
-  if (debug_log) {
-    fprintf(debug_log, "load_gamepak: Starting to load game: %s\n", name);
-    fclose(debug_log);
-  }
 
   // Save the original full path for lastPlayed before any processing
   char original_full_path[MAX_PATH];
@@ -3706,11 +3658,6 @@ s32 load_gamepak(char *name)
 		print_string_gbk(MSG[MSG_SEARCHING_BACKUP_ID], X_POS_CENTER, 148, COLOR15_WHITE, BG_NO_FILL);
     flip_screen(1);
     
-    FILE *debug_early = fopen("early_debug.log", "w");
-    if (debug_early) {
-      fprintf(debug_early, "After flip_screen, file_size = %d\n", file_size);
-      fclose(debug_early);
-    }
   }
 
   if (file_size > 0)
@@ -3734,61 +3681,15 @@ s32 load_gamepak(char *name)
     game_code[4] = 0;
     maker_code[2] = 0;
     // Load game configuration first
-    FILE *debug_log = fopen("game_load_debug.log", "w");
-    if (debug_log) {
-      fprintf(debug_log, "Starting game load process\n");
-      fprintf(debug_log, "Game title: %s\n", game_title);
-      fprintf(debug_log, "Game code: %s\n", game_code);
-      fprintf(debug_log, "Maker code: %s\n", maker_code);
-      fflush(debug_log);
-    }
-    
     load_game_config(game_title, game_code, maker_code);
-    
-    if (debug_log) {
-      fprintf(debug_log, "load_game_config completed\n");
-      fflush(debug_log);
-    }
-    
     load_game_config_file();
-    
-    if (debug_log) {
-      fprintf(debug_log, "load_game_config_file completed\n");
-      fprintf(debug_log, "backup_type = %d\n", backup_type);
-      fflush(debug_log);
-    }
 
     // Only scan for backup ID if not already set by game_config.txt
-    if (backup_type == BACKUP_NONE) {
-      if (debug_log) {
-        fprintf(debug_log, "Starting load_backup_id scan\n");
-        fflush(debug_log);
-      }
+    if (backup_type == BACKUP_NONE)
       load_backup_id();
-      if (debug_log) {
-        fprintf(debug_log, "load_backup_id completed\n");
-        fflush(debug_log);
-      }
-    } else {
-      if (debug_log) {
-        fprintf(debug_log, "Skipping load_backup_id - backup_type already set to %d\n", backup_type);
-        fflush(debug_log);
-      }
-    }
-    
+      
     change_ext(gamepak_filename, backup_filename, ".sav");
-    
-    if (debug_log) {
-      fprintf(debug_log, "Loading backup file: %s\n", backup_filename);
-      fflush(debug_log);
-    }
-    
     load_backup(backup_filename);
-    
-    if (debug_log) {
-      fprintf(debug_log, "load_backup completed\n");
-      fclose(debug_log);
-    }
 
     change_ext(gamepak_filename, cheats_filename, ".cht");
     add_cheats(cheats_filename);
@@ -3799,11 +3700,6 @@ s32 load_gamepak(char *name)
 
   // Save the last played game with the original full path
   if (file_size >= 0) {
-    FILE *debug_log = fopen("froggba_debug.log", "a");
-    if (debug_log) {
-      fprintf(debug_log, "load_gamepak: Saving last played game with full path: %s\n", original_full_path);
-      fclose(debug_log);
-    }
     save_last_played_game(original_full_path);
   }
 
