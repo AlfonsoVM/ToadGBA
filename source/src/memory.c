@@ -3423,8 +3423,12 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
     idle_loop_target_pc[idle_loop_targets++] = 0x8000a26;
   }
 
+  // TEMPORARILY DISABLED - game_config.txt parsing causing hangs
+  return -1;
+  
   sprintf(config_path, "%s%s", main_path, CONFIG_FILENAME);
 
+  // Try to open the config file but don't hang if it doesn't exist
   config_file = fopen(config_path, "rb");
 
   if (config_file)
