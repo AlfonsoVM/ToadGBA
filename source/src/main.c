@@ -835,7 +835,7 @@ int user_main(int argc, char *argv[])
 
   // NOW check for resume on boot functionality AFTER config is loaded
   if (argc <= 1 && option_resume_on_boot != 0) {
-    FILE *debug = fopen("resume_debug.log", "w");
+    FILE *debug = fopen("froglog.txt", "w");
     if (debug) {
       fprintf(debug, "Resume on boot enabled\n");
       fflush(debug);
