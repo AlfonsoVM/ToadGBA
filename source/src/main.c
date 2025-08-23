@@ -835,8 +835,18 @@ int user_main(int argc, char *argv[])
 
   // NOW check for resume on boot functionality AFTER config is loaded
   if (argc <= 1 && option_resume_on_boot != 0) {
+    FILE *debug = fopen("resume_debug.log", "w");
+    if (debug) {
+      fprintf(debug, "Resume on boot enabled\n");
+      fflush(debug);
+    }
+    
     char last_game_path[MAX_PATH];
     if (load_last_played_game(last_game_path, MAX_PATH) == 0) {
+      if (debug) {
+        fprintf(debug, "Found last played game: %s\n", last_game_path);
+        fflush(debug);
+      }
       
       // Check if it's already a full path (starts with "ms0:") or just a filename
       if (strncmp(last_game_path, "ms0:", 4) != 0) {
@@ -844,11 +854,22 @@ int user_main(int argc, char *argv[])
         char temp_filename[MAX_PATH];
         strcpy(temp_filename, last_game_path);
         sprintf(last_game_path, "%s%s", dir_roms, temp_filename);
-        
+        if (debug) {
+          fprintf(debug, "Constructed full path: %s\n", last_game_path);
+          fflush(debug);
+        }
       }
       
       // We have a last played game, try to load it
+      if (debug) {
+        fprintf(debug, "About to load gamepak: %s\n", last_game_path);
+        fflush(debug);
+      }
       if (load_gamepak(last_game_path) >= 0) {
+        if (debug) {
+          fprintf(debug, "Successfully loaded gamepak\n");
+          fclose(debug);
+        }
         // Successfully loaded last played game
         
         // Check if we should load auto-save state
@@ -874,8 +895,21 @@ int user_main(int argc, char *argv[])
         // Continue with execution
         execute_arm_translate(reg[EXECUTE_CYCLES]);
         return 0;
+      } else {
+        if (debug) {
+          fprintf(debug, "Failed to load gamepak\n");
+          fclose(debug);
+        }
       }
       // If we failed to load last played game, continue with normal logic
+    } else {
+      if (debug) {
+        fprintf(debug, "No last played game found\n");
+        fclose(debug);
+      }
+    }
+    if (debug && debug != NULL) {
+      fclose(debug);
     }
   }
 
