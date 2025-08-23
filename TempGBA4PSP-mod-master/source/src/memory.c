@@ -20,91 +20,33 @@
 
 #include "common.h"
 
+
 #define CONFIG_FILENAME  "game_config.txt"
 
-// Translation gate support - use externs from cpu.h
-#ifndef MAX_TRANSLATION_GATES
-#define MAX_TRANSLATION_GATES 8
-#endif
-extern u32 translation_gate_targets;
-extern u32 translation_gate_target_pc[MAX_TRANSLATION_GATES];
 
-
-// Alternative waitstate tables for compatibility mode
-static u8 ALIGN_DATA memory_waitstate_n_accurate[2][16] =
+u8 ALIGN_DATA memory_waitstate_n[2][16] =
 {
   { 0, 0, 2, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0 }, // 8,16bit accesses
   { 0, 0, 5, 0, 0, 1, 1, 1, 7, 7, 9, 9,13,13, 4, 0 }  // 32bit accesses
 };
 
-static u8 ALIGN_DATA memory_waitstate_s_accurate[2][16] =
+u8 ALIGN_DATA memory_waitstate_s[2][16] =
 {
   { 0, 0, 2, 0, 0, 0, 0, 0, 2, 2, 4, 4, 8, 8, 4, 0 },
   { 0, 0, 5, 0, 0, 1, 1, 1, 5, 5, 9, 9,17,17, 4, 0 }
 };
 
-static u8 ALIGN_DATA fetch_waitstate_n_accurate[2][16] =
+u8 ALIGN_DATA fetch_waitstate_n[2][16] =
 {
   { 0, 0, 2, 0, 0, 0, 0, 0, 4, 4, 4, 4, 4, 4, 4, 0 },
   { 0, 0, 5, 0, 0, 1, 1, 1, 7, 7, 9, 9,13,13, 4, 0 }
 };
 
-static u8 ALIGN_DATA fetch_waitstate_s_accurate[2][16] =
+u8 ALIGN_DATA fetch_waitstate_s[2][16] =
 {
   { 0, 0, 2, 0, 0, 0, 0, 0, 2, 2, 4, 4, 8, 8, 4, 0 },
   { 0, 0, 5, 0, 0, 1, 1, 1, 5, 5, 9, 9,17,17, 4, 0 }
 };
-
-// Function to switch between compatibility and performance modes
-void set_compatibility_mode(u32 mode) {
-  int i, j;
-  
-  if (mode == 1) {
-    // Copy accurate timing values for compatibility
-    for (i = 0; i < 2; i++) {
-      for (j = 0; j < 16; j++) {
-        memory_waitstate_n[i][j] = memory_waitstate_n_accurate[i][j];
-        memory_waitstate_s[i][j] = memory_waitstate_s_accurate[i][j];
-        fetch_waitstate_n[i][j] = fetch_waitstate_n_accurate[i][j];
-        fetch_waitstate_s[i][j] = fetch_waitstate_s_accurate[i][j];
-      }
-    }
-  } else {
-    // Use fast timing - restore original optimized values
-    // 8/16-bit accesses
-    memory_waitstate_n[0][0] = 0; memory_waitstate_n[0][1] = 0; memory_waitstate_n[0][2] = 1;
-    memory_waitstate_n[0][3] = 0; memory_waitstate_n[0][4] = 0; memory_waitstate_n[0][5] = 0;
-    memory_waitstate_n[0][6] = 0; memory_waitstate_n[0][7] = 0; memory_waitstate_n[0][8] = 2;
-    memory_waitstate_n[0][9] = 2; memory_waitstate_n[0][10] = 2; memory_waitstate_n[0][11] = 2;
-    memory_waitstate_n[0][12] = 2; memory_waitstate_n[0][13] = 2; memory_waitstate_n[0][14] = 2;
-    memory_waitstate_n[0][15] = 0;
-
-    // 32-bit accesses
-    memory_waitstate_n[1][0] = 0; memory_waitstate_n[1][1] = 0; memory_waitstate_n[1][2] = 3;
-    memory_waitstate_n[1][3] = 0; memory_waitstate_n[1][4] = 0; memory_waitstate_n[1][5] = 1;
-    memory_waitstate_n[1][6] = 1; memory_waitstate_n[1][7] = 1; memory_waitstate_n[1][8] = 4;
-    memory_waitstate_n[1][9] = 4; memory_waitstate_n[1][10] = 5; memory_waitstate_n[1][11] = 5;
-    memory_waitstate_n[1][12] = 7; memory_waitstate_n[1][13] = 7; memory_waitstate_n[1][14] = 2;
-    memory_waitstate_n[1][15] = 0;
-
-    // Sequential access values (reduced from originals)
-    memory_waitstate_s[0][2] = 1; memory_waitstate_s[0][8] = 1; memory_waitstate_s[0][9] = 1;
-    memory_waitstate_s[0][10] = 2; memory_waitstate_s[0][11] = 2; memory_waitstate_s[0][12] = 4;
-    memory_waitstate_s[0][13] = 4; memory_waitstate_s[0][14] = 2;
-
-    memory_waitstate_s[1][2] = 3; memory_waitstate_s[1][8] = 3; memory_waitstate_s[1][9] = 3;
-    memory_waitstate_s[1][10] = 5; memory_waitstate_s[1][11] = 5; memory_waitstate_s[1][12] = 9;
-    memory_waitstate_s[1][13] = 9; memory_waitstate_s[1][14] = 2;
-
-    // Copy values to fetch tables
-    for (i = 0; i < 2; i++) {
-      for (j = 0; j < 16; j++) {
-        fetch_waitstate_n[i][j] = memory_waitstate_n[i][j];
-        fetch_waitstate_s[i][j] = memory_waitstate_s[i][j];
-      }
-    }
-  }
-}
 
 // GBA memory areas.
 
@@ -135,31 +77,6 @@ u32 iwram_control;
 u8 *io_readable = (u8 *)io_registers + 0x400;
 
 u32 obj_address = 0x10000; // OBJ Tiles Address
-
-// Waitstate tables - initialized with fast values, can be switched to accurate for compatibility
-u8 ALIGN_DATA memory_waitstate_n[2][16] =
-{
-  { 0, 0, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 0 }, // 8,16bit accesses (fast)
-  { 0, 0, 3, 0, 0, 1, 1, 1, 4, 4, 5, 5, 7, 7, 2, 0 }  // 32bit accesses (fast)
-};
-
-u8 ALIGN_DATA memory_waitstate_s[2][16] =
-{
-  { 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 2, 2, 4, 4, 2, 0 }, // Sequential penalties reduced
-  { 0, 0, 3, 0, 0, 1, 1, 1, 3, 3, 5, 5, 9, 9, 2, 0 }  // Sequential penalties reduced
-};
-
-u8 ALIGN_DATA fetch_waitstate_n[2][16] =
-{
-  { 0, 0, 1, 0, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 0 }, // Fetch penalties reduced
-  { 0, 0, 3, 0, 0, 1, 1, 1, 4, 4, 5, 5, 7, 7, 2, 0 }  // Fetch penalties reduced
-};
-
-u8 ALIGN_DATA fetch_waitstate_s[2][16] =
-{
-  { 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 2, 2, 4, 4, 2, 0 }, // Sequential fetch reduced
-  { 0, 0, 3, 0, 0, 1, 1, 1, 3, 3, 5, 5, 9, 9, 2, 0 }  // Sequential fetch reduced
-};
 
 DmaTransferType ALIGN_DATA dma[4];
 const ALIGN_DATA s32 dma_addr_control[4] = { 2, -2, 0, 2 };
@@ -603,7 +520,6 @@ static CPU_ALERT_TYPE write32_palette_ram(u32 address, u32 value);
 static CPU_ALERT_TYPE write32_vram(u32 address, u32 value);
 static CPU_ALERT_TYPE write32_oam_ram(u32 address, u32 value);
 
-
 static CPU_ALERT_TYPE (*mem_write8[16])(u32, u32) =
 {
   write_null,           // 0
@@ -1027,13 +943,7 @@ inline static CPU_ALERT_TYPE check_smc_write(u16 *metadata, u32 offset, u8 regio
 #define WRITE_EWRAM(type)                                                     \
   address &= 0x3FFFF;                                                         \
   ADDRESS##type(ewram, address) = value;                                      \
-  {                                                                           \
-    CPU_ALERT_TYPE smc_result = check_smc_write(ewram_metadata, address, 0x02); \
-    if (smc_result & CPU_ALERT_SMC) {                                         \
-      partial_flush_ram_stub(address, 0x02);                                 \
-    }                                                                         \
-    return smc_result;                                                        \
-  }                      \
+  return check_smc_write(ewram_metadata, address, 0x02);                      \
 
 static CPU_ALERT_TYPE write8_ewram(u32 address, u32 value)
 {
@@ -1053,13 +963,7 @@ static CPU_ALERT_TYPE write32_ewram(u32 address, u32 value)
 #define WRITE_IWRAM(type)                                                     \
   address &= 0x7FFF;                                                          \
   ADDRESS##type(iwram, address) = value;                                      \
-  {                                                                           \
-    CPU_ALERT_TYPE smc_result = check_smc_write(iwram_metadata, address, 0x03); \
-    if (smc_result & CPU_ALERT_SMC) {                                         \
-      partial_flush_ram_stub(address, 0x03);                                 \
-    }                                                                         \
-    return smc_result;                                                        \
-  }                      \
+  return check_smc_write(iwram_metadata, address, 0x03);                      \
 
 static CPU_ALERT_TYPE write8_iwram(u32 address, u32 value)
 {
@@ -1125,13 +1029,7 @@ static CPU_ALERT_TYPE write32_palette_ram(u32 address, u32 value)
     address &= 0x0FFFF;                                                       \
                                                                               \
   ADDRESS##type(vram, address) = value;                                       \
-  {                                                                           \
-    CPU_ALERT_TYPE smc_result = check_smc_write(vram_metadata, address, 0x06); \
-    if (smc_result & CPU_ALERT_SMC) {                                         \
-      partial_flush_ram_stub(address, 0x06);                                 \
-    }                                                                         \
-    return smc_result;                                                        \
-  }                       \
+  return check_smc_write(vram_metadata, address, 0x06);                       \
 
 static CPU_ALERT_TYPE write8_vram(u32 address, u32 value)
 {
@@ -1252,33 +1150,15 @@ static void waitstate_control(u32 value)
   const u8 gamepak_ws1_seq[2] = { 4, 1 };
   const u8 gamepak_ws2_seq[2] = { 8, 1 };
 
-#ifdef PSP_MEMORY_OPTIMIZATIONS
-  // Optimized waitstate tables for performance mode
-  const u8 opt_waitstate_table[4] = { 2, 2, 1, 4 };  // Reduced by ~50%
-  const u8 opt_gamepak_ws0_seq[2] = { 1, 1 };
-  const u8 opt_gamepak_ws1_seq[2] = { 2, 1 };
-  const u8 opt_gamepak_ws2_seq[2] = { 4, 1 };
-  
-  // Wait State First Access (8/16bit) - Optimized
-  pMEMORY_WS16N(0x08) = pMEMORY_WS16N(0x09) = opt_waitstate_table[(value >> 2) & 0x03];
-  pMEMORY_WS16N(0x0A) = pMEMORY_WS16N(0x0B) = opt_waitstate_table[(value >> 5) & 0x03];
-  pMEMORY_WS16N(0x0C) = pMEMORY_WS16N(0x0D) = opt_waitstate_table[(value >> 8) & 0x03];
-
-  // Wait State Second Access (8/16bit) - Optimized
-  pMEMORY_WS16S(0x08) = pMEMORY_WS16S(0x09) = opt_gamepak_ws0_seq[(value >>  4) & 0x01];
-  pMEMORY_WS16S(0x0A) = pMEMORY_WS16S(0x0B) = opt_gamepak_ws1_seq[(value >>  7) & 0x01];
-  pMEMORY_WS16S(0x0C) = pMEMORY_WS16S(0x0D) = opt_gamepak_ws2_seq[(value >> 10) & 0x01];
-#else
-  // Wait State First Access (8/16bit) - Normal
+  // Wait State First Access (8/16bit)
   pMEMORY_WS16N(0x08) = pMEMORY_WS16N(0x09) = waitstate_table[(value >> 2) & 0x03];
   pMEMORY_WS16N(0x0A) = pMEMORY_WS16N(0x0B) = waitstate_table[(value >> 5) & 0x03];
   pMEMORY_WS16N(0x0C) = pMEMORY_WS16N(0x0D) = waitstate_table[(value >> 8) & 0x03];
 
-  // Wait State Second Access (8/16bit) - Normal
+  // Wait State Second Access (8/16bit)
   pMEMORY_WS16S(0x08) = pMEMORY_WS16S(0x09) = gamepak_ws0_seq[(value >>  4) & 0x01];
   pMEMORY_WS16S(0x0A) = pMEMORY_WS16S(0x0B) = gamepak_ws1_seq[(value >>  7) & 0x01];
   pMEMORY_WS16S(0x0C) = pMEMORY_WS16S(0x0D) = gamepak_ws2_seq[(value >> 10) & 0x01];
-#endif
 
   // SRAM Wait Control (8bit)
   pMEMORY_WS16N(0x0e) = pMEMORY_WS16S(0x0e) =
@@ -2429,7 +2309,7 @@ CPU_ALERT_TYPE write_rtc(u32 address, u32 value)
                   // Actually outputs the time, all of it
                   case RTC_COMMAND_OUTPUT_TIME_FULL:
                   {
-                    ScePspDateTime current_time;
+                    pspTime current_time;
                     int day_of_week;
 
                     sceRtcGetCurrentClockLocalTime(&current_time);
@@ -2447,22 +2327,22 @@ CPU_ALERT_TYPE write_rtc(u32 address, u32 value)
                     rtc_data[2] = encode_bcd(current_time.day);
                     rtc_data[3] = encode_bcd(day_of_week);
                     rtc_data[4] = encode_bcd(current_time.hour);
-                    rtc_data[5] = encode_bcd(current_time.minute);
-                    rtc_data[6] = encode_bcd(current_time.second);
+                    rtc_data[5] = encode_bcd(current_time.minutes);
+                    rtc_data[6] = encode_bcd(current_time.seconds);
                     break;
                   }
 
                   // Only outputs the current time of day.
                   case RTC_COMMAND_OUTPUT_TIME:
                   {
-                    ScePspDateTime current_time;
+                    pspTime current_time;
                     sceRtcGetCurrentClockLocalTime(&current_time);
 
                     rtc_state = RTC_OUTPUT_DATA;
                     rtc_data_bytes = 3;
                     rtc_data[0] = encode_bcd(current_time.hour);
-                    rtc_data[1] = encode_bcd(current_time.minute);
-                    rtc_data[2] = encode_bcd(current_time.second);
+                    rtc_data[1] = encode_bcd(current_time.minutes);
+                    rtc_data[2] = encode_bcd(current_time.seconds);
                     break;
                   }
                 }
@@ -2895,9 +2775,6 @@ void init_gamepak_buffer(void)
 void init_memory(void)
 {
   u32 i = 0;
-
-  // Initialize memory timing based on compatibility mode
-  set_compatibility_mode(option_compatibility_mode);
 
   // Fill memory map regions, areas marked as NULL must be checked directly
   MAP_REGION(read, 0x0000000, 0x1000000, 1, bios.rom);
@@ -3337,14 +3214,15 @@ s32 parse_config_line(char *current_line, char *current_variable, char *current_
 
   line_ptr_new = skip_spaces(line_ptr_new + 1);
   strcpy(current_value, line_ptr_new);
-  
-  // Remove trailing newline and carriage return
   line_ptr_new = current_value + strlen(current_value) - 1;
-  while (line_ptr_new >= current_value && (*line_ptr_new == '\n' || *line_ptr_new == '\r'))
+  if (*line_ptr_new == '\n')
   {
-    *line_ptr_new = 0;
     line_ptr_new--;
+    *line_ptr_new = 0;
   }
+
+  if (*line_ptr_new == '\r')
+    *line_ptr_new = 0;
 
   return 0;
 }
@@ -3368,59 +3246,10 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
   bios.rom[0x39] = 0x00;
   bios.rom[0x2C] = 0x00;
 
-  translation_gate_targets = 0;
-  for (i = 0; i < MAX_TRANSLATION_GATES; i++)
-    translation_gate_target_pc[i] = 0xFFFFFFFF;
-
-  // Load built-in optimizations for popular games
-  if (!strcmp(gamepak_code, "AWRE") && !strcmp(gamepak_maker, "01")) {
-    // Advance Wars (U)
-    idle_loop_target_pc[idle_loop_targets++] = 0x803880a;
-  }
-  else if (!strcmp(gamepak_code, "AWRP") && !strcmp(gamepak_maker, "01")) {
-    // Advance Wars (E)
-    idle_loop_target_pc[idle_loop_targets++] = 0x803880a;
-  }
-  else if (!strcmp(gamepak_code, "AW2E") && !strcmp(gamepak_maker, "01")) {
-    // Advance Wars 2: Black Hole Rising (U)
-    idle_loop_target_pc[idle_loop_targets++] = 0x8036e2a;
-  }
-  else if (!strcmp(gamepak_code, "AW2P") && !strcmp(gamepak_maker, "01")) {
-    // Advance Wars 2: Black Hole Rising (E)
-    idle_loop_target_pc[idle_loop_targets++] = 0x8036e2a;
-  }
-  else if (!strcmp(gamepak_code, "AREJ") && !strcmp(gamepak_maker, "08")) {
-    // Battle Network Rockman EXE (J)
-    idle_loop_target_pc[idle_loop_targets++] = 0x8000338;
-  }
-  else if (!strcmp(gamepak_code, "AAME") && !strcmp(gamepak_maker, "A4")) {
-    // Castlevania Circle Of The Moon (U)
-    idle_loop_target_pc[idle_loop_targets++] = 0x80003d2;
-  }
-  else if (!strcmp(gamepak_code, "AAMP") && !strcmp(gamepak_maker, "A4")) {
-    // Castlevania (E)
-    idle_loop_target_pc[idle_loop_targets++] = 0x80003d2;
-  }
-  else if (!strcmp(gamepak_code, "AFSE") && !strcmp(gamepak_maker, "01")) {
-    // Final Fantasy I & II: Dawn of Souls (U)
-    idle_loop_target_pc[idle_loop_targets++] = 0x8000428;
-  }
-  else if (!strcmp(gamepak_code, "AFSP") && !strcmp(gamepak_maker, "01")) {
-    // Final Fantasy I & II: Dawn of Souls (E)  
-    idle_loop_target_pc[idle_loop_targets++] = 0x8000428;
-  }
-  else if (!strcmp(gamepak_code, "ABSE") && !strcmp(gamepak_maker, "52")) {
-    // Bomberman Tournament (U)
-    idle_loop_target_pc[idle_loop_targets++] = 0x8000526;
-  }
-  else if (!strcmp(gamepak_code, "BKWE") && !strcmp(gamepak_maker, "5G")) {
-    // Bookworm (U)
-    idle_loop_target_pc[idle_loop_targets++] = 0x800397c;
-  }
-  else if (!strcmp(gamepak_code, "ABJE") && !strcmp(gamepak_maker, "6L")) {
-    // Broken Sword - The Shadow of the Templars (U)
-    idle_loop_target_pc[idle_loop_targets++] = 0x8000a26;
-  }
+  //translation_gate_targets = 0;
+/*fix no game_code*/
+  //flash_device_id = FLASH_DEVICE_MACRONIX_64KB;
+  //backup_type = BACKUP_NONE;
 
   sprintf(config_path, "%s%s", main_path, CONFIG_FILENAME);
 
@@ -3476,44 +3305,26 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
             {
               iwram_stack_optimize = 0;
             }
-            // Flash ROM type configuration for Pokemon and other games
-            if (!strcasecmp(current_variable, "flash_rom_type"))
+/*
+            if (!strcasecmp(current_variable, "flash_rom_type") && !strcasecmp(current_value, "128KB"))
             {
-              if (!strcasecmp(current_value, "128KB"))
-              {
-                flash_device_id = FLASH_DEVICE_SANYO_128KB;
-                flash_manufacturer_id = FLASH_MANUFACTURER_SANYO;
-                flash_size = FLASH_SIZE_128KB;
-              }
-              else if (!strcasecmp(current_value, "64KB"))
-              {
-                flash_device_id = FLASH_DEVICE_PANASONIC_64KB;
-                flash_manufacturer_id = FLASH_MANUFACTURER_PANASONIC;
-                flash_size = FLASH_SIZE_64KB;
-              }
+              flash_device_id = FLASH_DEVICE_MACRONIX_128KB;
             }
 
-            // Save type override configuration
+            // DBZLGCYGOKU2 のプロテクト回避
+            // EEPROM_V124で特殊な物(現在判別不可) で指定すれば動作可
             if (!strcasecmp(current_variable, "save_type"))
             {
               if (!strcasecmp(current_value, "sram"))
                 backup_type = BACKUP_SRAM;
-              else if (!strcasecmp(current_value, "flash"))
+              else
+              if (!strcasecmp(current_value, "flash"))
                 backup_type = BACKUP_FLASH;
-              else if (!strcasecmp(current_value, "eeprom"))
+              else
+              if (!strcasecmp(current_value, "eeprom"))
                 backup_type = BACKUP_EEPROM;
             }
-
-            // Translation gate targets for self-modifying code
-            if (!strcasecmp(current_variable, "translation_gate_target"))
-            {
-              if (translation_gate_targets < MAX_TRANSLATION_GATES)
-              {
-                translation_gate_target_pc[translation_gate_targets] = strtol(current_value, NULL, 16);
-                translation_gate_targets++;
-              }
-            }
-
+*/
             if (!strcasecmp(current_variable, "bios_rom_hack_39") &&
                 !strcasecmp(current_value, "yes"))
             {
@@ -3551,41 +3362,17 @@ static s32 load_gamepak_raw(char *name)
   {
     u32 _gamepak_size = file_length(name);
 
-    // Validate file size - GBA ROMs must be at least 32KB and at most 32MB
-    if (_gamepak_size < 32768 || _gamepak_size > (32 * 1024 * 1024)) {
-      FILE_CLOSE(gamepak_file);
-      return -1;
-    }
-
     // If it's a big file size keep it don't close it, we'll
     // probably want to load it later
     if (_gamepak_size <= gamepak_ram_buffer_size)
     {
       FILE_READ(gamepak_file, gamepak_rom, _gamepak_size);
       FILE_CLOSE(gamepak_file);
-      
-      // Validate GBA ROM header - check for Nintendo logo at 0x04-0xA0
-      // At minimum, check the first 4 bytes after entry point
-      if (_gamepak_size >= 0x100) {
-        u8 *header = gamepak_rom + 0x04;
-        // Check for part of the Nintendo logo (known bytes)
-        if (header[0] != 0x24 || header[1] != 0xFF || header[2] != 0xAE || header[3] != 0x51) {
-          return -1;  // Not a valid GBA ROM
-        }
-      }
     }
     else
     {
       // Read in just enough for the header
       FILE_READ(gamepak_file, gamepak_rom, 0x100);
-      
-      // Validate GBA ROM header for large files too
-      u8 *header = gamepak_rom + 0x04;
-      // Check for part of the Nintendo logo (known bytes)
-      if (header[0] != 0x24 || header[1] != 0xFF || header[2] != 0xAE || header[3] != 0x51) {
-        FILE_CLOSE(gamepak_file);
-        return -1;  // Not a valid GBA ROM
-      }
 
       gamepak_file_large = gamepak_file;
 
@@ -3610,16 +3397,6 @@ static s32 load_gamepak_raw(char *name)
 
 s32 load_gamepak(char *name)
 {
-  FILE *debug_log = fopen("froggba_debug.log", "a");
-  if (debug_log) {
-    fprintf(debug_log, "load_gamepak: Starting to load game: %s\n", name);
-    fclose(debug_log);
-  }
-
-  // Save the original full path for lastPlayed before any processing
-  char original_full_path[MAX_PATH];
-  strcpy(original_full_path, name);
-
   char *dot_position = strrchr(name, '.');
   char cheats_filename[MAX_FILE];
 
@@ -3628,29 +3405,17 @@ s32 load_gamepak(char *name)
 
   draw_box_alpha(110, 50, 370, 220, 0xBF000000);
   draw_box_line(120, 60, 360, 210, COLOR15_WHITE);
-  
-  // Draw cute ASCII frog
-  print_string("     @ @", X_POS_CENTER, 75, COLOR15_GREEN, BG_NO_FILL);
-  print_string("    (   )", X_POS_CENTER, 85, COLOR15_GREEN, BG_NO_FILL);
-  print_string("   _) (_", X_POS_CENTER, 95, COLOR15_GREEN, BG_NO_FILL);
-  
-  if (option_language == 0 || option_language == 1)
-	print_string(MSG[MSG_LOADING_ROM], X_POS_CENTER, 115, COLOR15_WHITE, BG_NO_FILL);
+  if (option_language == 0)
+	print_string(MSG[MSG_LOADING_ROM], X_POS_CENTER, 100, COLOR15_WHITE, BG_NO_FILL);
   else
-	print_string_gbk(MSG[MSG_LOADING_ROM], X_POS_CENTER, 115, COLOR15_WHITE, BG_NO_FILL);
+	print_string_gbk(MSG[MSG_LOADING_ROM], X_POS_CENTER, 100, COLOR15_WHITE, BG_NO_FILL);
   flip_screen(1);
   draw_box_alpha(110, 50, 370, 220, 0xBF000000);
   draw_box_line(120, 60, 360, 210, COLOR15_WHITE);
-  
-  // Draw cute ASCII frog
-  print_string("     @ @", X_POS_CENTER, 75, COLOR15_GREEN, BG_NO_FILL);
-  print_string("    (   )", X_POS_CENTER, 85, COLOR15_GREEN, BG_NO_FILL);
-  print_string("   _) (_", X_POS_CENTER, 95, COLOR15_GREEN, BG_NO_FILL);
-  
-  if (option_language == 0 || option_language == 1)
-	print_string(MSG[MSG_LOADING_ROM], X_POS_CENTER, 115, COLOR15_WHITE, BG_NO_FILL);
+  if (option_language == 0)
+	print_string(MSG[MSG_LOADING_ROM], X_POS_CENTER, 100, COLOR15_WHITE, BG_NO_FILL);
   else
-	print_string_gbk(MSG[MSG_LOADING_ROM], X_POS_CENTER, 115, COLOR15_WHITE, BG_NO_FILL);
+	print_string_gbk(MSG[MSG_LOADING_ROM], X_POS_CENTER, 100, COLOR15_WHITE, BG_NO_FILL);
 
   scePowerLock(0);
   set_cpu_clock(PSP_CLOCK_333);
@@ -3664,7 +3429,7 @@ s32 load_gamepak(char *name)
   if (!strcasecmp(dot_position, ".gba") || !strcasecmp(dot_position, ".agb") || !strcasecmp(dot_position, ".bin"))
   {
     file_size = load_gamepak_raw(name);
-	if (option_language == 0 || option_language == 1)
+	if (option_language == 0)
 		print_string(MSG[MSG_SEARCHING_BACKUP_ID], X_POS_CENTER, 148, COLOR15_WHITE, BG_NO_FILL);
     else
 		print_string_gbk(MSG[MSG_SEARCHING_BACKUP_ID], X_POS_CENTER, 148, COLOR15_WHITE, BG_NO_FILL);
@@ -3706,16 +3471,6 @@ s32 load_gamepak(char *name)
   set_cpu_clock(PSP_CLOCK_222);
   scePowerUnlock(0);
 
-  // Save the last played game with the original full path
-  if (file_size >= 0) {
-    FILE *debug_log = fopen("froggba_debug.log", "a");
-    if (debug_log) {
-      fprintf(debug_log, "load_gamepak: Saving last played game with full path: %s\n", original_full_path);
-      fclose(debug_log);
-    }
-    save_last_played_game(original_full_path);
-  }
-
   return file_size;
 
 }
@@ -3754,46 +3509,12 @@ void load_state(char *savestate_filename)
 
   sprintf(savestate_path, "%s%s", dir_state, savestate_filename);
 
-  // Temporarily free overlay memory to make room for save state operations
-  extern void free_overlay_memory(void);
-  extern void load_overlay(const char *filename);
-  extern u32 option_overlay_enabled;
-  extern u32 option_overlay_selected;
-  extern char overlay_names[10][64];
-  int need_restore_overlay = 0;
-  char saved_overlay_name[64] = {0};
-  
-  // Free overlay memory if any overlay is loaded (not just if enabled)
-  extern int overlay_loaded;
-  if (overlay_loaded || (option_overlay_enabled && option_overlay_selected > 0)) {
-    if (option_overlay_selected > 0 && option_overlay_selected < 10) {
-      strcpy(saved_overlay_name, overlay_names[option_overlay_selected]);
-      need_restore_overlay = 1;
-    }
-    free_overlay_memory();
-  }
-
   scePowerLock(0);
 
   FILE_OPEN(savestate_file, savestate_path, READ);
 
   if (FILE_CHECK_VALID(savestate_file))
   {
-    // Check file size to ensure it's a valid save state
-    u32 savestate_file_size = file_length(savestate_path);
-    u32 expected_size = GBA_SCREEN_SIZE + sizeof(u64) + SAVESTATE_SIZE;
-    
-    if (savestate_file_size < expected_size) {
-      FILE_CLOSE(savestate_file);
-      scePowerUnlock(0);
-      // Restore overlay if we freed it earlier
-      if (need_restore_overlay) {
-        load_overlay(saved_overlay_name);
-      }
-      error_msg("Save state file is corrupted or incomplete.", 1);
-      return;
-    }
-
     FILE_SEEK(savestate_file, GBA_SCREEN_SIZE + sizeof(u64), SEEK_SET);
 
     SAVESTATE_BLOCK(read);
@@ -3809,11 +3530,6 @@ void load_state(char *savestate_filename)
   }
 
   scePowerUnlock(0);
-  
-  // Restore overlay if we freed it earlier
-  if (need_restore_overlay) {
-    load_overlay(saved_overlay_name);
-  }
 }
 
 void save_state(char *savestate_filename, u16 *screen_capture)
@@ -3825,35 +3541,7 @@ void save_state(char *savestate_filename, u16 *screen_capture)
 
   sprintf(savestate_path, "%s%s", dir_state, savestate_filename);
 
-  // Temporarily free overlay memory to make room for save state buffer
-  extern void free_overlay_memory(void);
-  extern void load_overlay(const char *filename);
-  extern u32 option_overlay_enabled;
-  extern u32 option_overlay_selected;
-  extern char overlay_names[10][64];
-  int need_restore_overlay = 0;
-  char saved_overlay_name[64] = {0};
-  
-  // Free overlay memory if any overlay is loaded (not just if enabled)
-  extern int overlay_loaded;
-  if (overlay_loaded || (option_overlay_enabled && option_overlay_selected > 0)) {
-    if (option_overlay_selected > 0 && option_overlay_selected < 10) {
-      strcpy(saved_overlay_name, overlay_names[option_overlay_selected]);
-      need_restore_overlay = 1;
-    }
-    free_overlay_memory();
-  }
-
   savestate_write_buffer = (u8 *)safe_malloc(SAVESTATE_SIZE);
-  if (savestate_write_buffer == NULL) {
-    // Restore overlay if allocation failed
-    if (need_restore_overlay) {
-      load_overlay(saved_overlay_name);
-    }
-    scePowerUnlock(0);
-    error_msg("Could not allocate memory for save state.", 1);
-    return;
-  }
   memset(savestate_write_buffer, 0, SAVESTATE_SIZE);
 
   write_mem_ptr = savestate_write_buffer;
@@ -3864,14 +3552,11 @@ void save_state(char *savestate_filename, u16 *screen_capture)
 
   if (FILE_CHECK_VALID(savestate_file))
   {
-    // Write screen capture directly to file (not to memory buffer)
-    FILE_WRITE(savestate_file, screen_capture, GBA_SCREEN_SIZE);
+    FILE_WRITE_MEM(savestate_file, screen_capture, GBA_SCREEN_SIZE);
 
-    // Write timestamp directly to file (not to memory buffer)
     u64 current_time = ticker();
-    FILE_WRITE_VARIABLE(savestate_file, current_time);
+    FILE_WRITE_MEM_VARIABLE(savestate_file, current_time);
 
-    // Now write the savestate data to memory buffer, then to file
     SAVESTATE_BLOCK(write_mem);
     FILE_WRITE(savestate_file, savestate_write_buffer, SAVESTATE_SIZE);
     FILE_CLOSE(savestate_file);
@@ -3880,11 +3565,6 @@ void save_state(char *savestate_filename, u16 *screen_capture)
   scePowerUnlock(0);
 
   free(savestate_write_buffer);
-  
-  // Restore overlay if we freed it earlier
-  if (need_restore_overlay) {
-    load_overlay(saved_overlay_name);
-  }
 }
 
 
@@ -3935,106 +3615,5 @@ static void memory_read_savestate(SceUID savestate_file)
 static void memory_write_mem_savestate(SceUID savestate_file)
 {
   MEMORY_SAVESTATE_BODY(WRITE_MEM);
-}
-
-void save_last_played_game(char *game_path)
-{
-  SceUID lastplayed_file;
-  char lastplayed_path[MAX_PATH];
-  
-  sprintf(lastplayed_path, "%slastPlayed", main_path);
-  
-  FILE_OPEN(lastplayed_file, lastplayed_path, WRITE);
-  if (FILE_CHECK_VALID(lastplayed_file)) {
-    FILE_WRITE(lastplayed_file, game_path, strlen(game_path));
-    FILE_CLOSE(lastplayed_file);
-  }
-}
-
-s32 load_last_played_game(char *game_path, int max_path_length)
-{
-  SceUID lastplayed_file;
-  char lastplayed_path[MAX_PATH];
-  s32 result = -1;
-  
-  sprintf(lastplayed_path, "%slastPlayed", main_path);
-  
-  FILE_OPEN(lastplayed_file, lastplayed_path, READ);
-  if (FILE_CHECK_VALID(lastplayed_file)) {
-    u32 file_size = file_length(lastplayed_path);
-    
-    if (file_size > 0 && file_size < max_path_length) {
-      FILE_READ(lastplayed_file, game_path, file_size);
-      game_path[file_size] = 0;  // Null terminate
-      result = 0;
-    }
-    FILE_CLOSE(lastplayed_file);
-  }
-  
-  return result;
-}
-
-// Hidden slot 11 for auto-resume feature
-#define AUTO_RESUME_SLOT 11
-
-void save_auto_resume_state(void)
-{
-  char savestate_filename[MAX_PATH];
-  char savestate_ext[16];
-  
-  // Only save if auto save/load is enabled
-  extern u32 option_auto_save_state;
-  if (option_auto_save_state == 0) {
-    return;
-  }
-  
-  // Don't save if no game is loaded
-  if (gamepak_filename[0] == 0) {
-    return;
-  }
-  
-  // Generate filename for hidden slot 11
-  sprintf(savestate_ext, "_%d.svs", AUTO_RESUME_SLOT);
-  change_ext(gamepak_filename, savestate_filename, savestate_ext);
-  
-  // Save state with a dummy screen capture for auto-save
-  u16 *dummy_screen = (u16 *)safe_malloc(GBA_SCREEN_SIZE);
-  if (dummy_screen != NULL) {
-    memset(dummy_screen, 0, GBA_SCREEN_SIZE);  // Fill with black screen
-    save_state(savestate_filename, dummy_screen);
-    free(dummy_screen);
-  }
-}
-
-s32 load_auto_resume_state(void)
-{
-  char savestate_filename[MAX_PATH];
-  char savestate_ext[16];
-  struct stat file_info;
-  
-  // Generate filename for hidden slot 11
-  sprintf(savestate_ext, "_%d.svs", AUTO_RESUME_SLOT);
-  change_ext(gamepak_filename, savestate_filename, savestate_ext);
-  
-  // Build full path
-  char full_savestate_path[MAX_PATH];
-  sprintf(full_savestate_path, "%s%s", dir_state, savestate_filename);
-  
-  // Check if auto-save state exists
-  if (stat(full_savestate_path, &file_info) == 0) {
-    // Check if file has reasonable size (at least 100KB for a valid save state)
-    // GBA save states are typically 400-600KB
-    if (file_info.st_size < 100 * 1024) {
-      // Delete the corrupted file
-      remove(full_savestate_path);
-      return -1;
-    }
-    
-    // Try to load the state
-    load_state(savestate_filename);
-    return 0;
-  }
-  
-  return -1;
 }
 
