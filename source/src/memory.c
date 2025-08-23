@@ -3364,6 +3364,7 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
     idle_loop_target_pc[i] = 0xFFFFFFFF;
 
   iwram_stack_optimize = 1;
+  backup_type = BACKUP_NONE;  // Initialize backup type
 
   bios.rom[0x39] = 0x00;
   bios.rom[0x2C] = 0x00;
@@ -3479,6 +3480,7 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
             // Flash ROM type configuration for Pokemon and other games
             if (!strcasecmp(current_variable, "flash_rom_type"))
             {
+              backup_type = BACKUP_FLASH;  // Set backup type when flash is configured
               if (!strcasecmp(current_value, "128KB"))
               {
                 flash_device_id = FLASH_DEVICE_SANYO_128KB;
@@ -3691,11 +3693,13 @@ s32 load_gamepak(char *name)
     game_title[12] = 0;
     game_code[4] = 0;
     maker_code[2] = 0;
-	//load_backup_id();//up order to fix no game_code
+    // Load game configuration first
     load_game_config(game_title, game_code, maker_code);
     load_game_config_file();
 
-	load_backup_id();
+    // Only scan for backup ID if not already set by game_config.txt
+    if (backup_type == BACKUP_NONE)
+      load_backup_id();
     change_ext(gamepak_filename, backup_filename, ".sav");
     load_backup(backup_filename);
 
