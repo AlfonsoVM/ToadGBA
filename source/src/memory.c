@@ -3603,6 +3603,7 @@ static s32 load_gamepak_raw(char *name)
 
 s32 load_gamepak(char *name)
 {
+  FILE *debug_log;
 
   // Save the original full path for lastPlayed before any processing
   char original_full_path[MAX_PATH];
@@ -3681,26 +3682,73 @@ s32 load_gamepak(char *name)
     game_code[4] = 0;
     maker_code[2] = 0;
     // Load game configuration first
+    debug_log = fopen("froglog.txt", "a");
+    if (debug_log) {
+      fprintf(debug_log, "GAMEPAK: About to load game config for: %s %s %s\n", game_title, game_code, maker_code);
+      fclose(debug_log);
+    }
     load_game_config(game_title, game_code, maker_code);
     load_game_config_file();
 
+    debug_log = fopen("froglog.txt", "a");
+    if (debug_log) {
+      fprintf(debug_log, "GAMEPAK: Game config loaded, backup_type=%d\n", backup_type);
+      fclose(debug_log);
+    }
+
     // Only scan for backup ID if not already set by game_config.txt
-    if (backup_type == BACKUP_NONE)
+    if (backup_type == BACKUP_NONE) {
+      debug_log = fopen("froglog.txt", "a");
+      if (debug_log) {
+        fprintf(debug_log, "GAMEPAK: About to scan backup ID\n");
+        fclose(debug_log);
+      }
       load_backup_id();
+      debug_log = fopen("froglog.txt", "a");
+      if (debug_log) {
+        fprintf(debug_log, "GAMEPAK: Backup ID scan complete\n");
+        fclose(debug_log);
+      }
+    }
       
+    debug_log = fopen("froglog.txt", "a");
+    if (debug_log) {
+      fprintf(debug_log, "GAMEPAK: About to load backup file\n");
+      fclose(debug_log);
+    }
     change_ext(gamepak_filename, backup_filename, ".sav");
     load_backup(backup_filename);
+    debug_log = fopen("froglog.txt", "a");
+    if (debug_log) {
+      fprintf(debug_log, "GAMEPAK: Backup loaded\n");
+      fclose(debug_log);
+    }
 
     change_ext(gamepak_filename, cheats_filename, ".cht");
     add_cheats(cheats_filename);
   }
 
+  debug_log = fopen("froglog.txt", "a");
+  if (debug_log) {
+    fprintf(debug_log, "GAMEPAK: About to set CPU clock and unlock power\n");
+    fclose(debug_log);
+  }
   set_cpu_clock(PSP_CLOCK_222);
   scePowerUnlock(0);
 
   // Save the last played game with the original full path
   if (file_size >= 0) {
+    debug_log = fopen("froglog.txt", "a");
+    if (debug_log) {
+      fprintf(debug_log, "GAMEPAK: About to save last played game\n");
+      fclose(debug_log);
+    }
     save_last_played_game(original_full_path);
+    debug_log = fopen("froglog.txt", "a");
+    if (debug_log) {
+      fprintf(debug_log, "GAMEPAK: load_gamepak COMPLETE, returning file_size=%d\n", file_size);
+      fclose(debug_log);
+    }
   }
 
   return file_size;

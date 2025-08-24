@@ -71,6 +71,7 @@ u32 option_color_correction = 0;
 u32 option_button_mapping = 0;  // 0 = X/O (X confirm, O cancel), 1 = O/X (O confirm, X cancel)
 u32 option_resume_on_boot = 0;  // 0 = off, 1 = on
 u32 option_auto_save_state = 0; // 0 = off, 1 = on
+u32 pending_resume_load = 0;    // Countdown for delayed resume loading
 u32 fast_forward_speed = 0;  // 0 = 1x (off), 1 = 2x, 2 = 3x
 u32 layer_merge_enabled = 1;  // Layer merging optimization
 
@@ -401,6 +402,20 @@ u32 update_gba(void)
 
           if (!skip_next_frame) {
             (*update_screen)();
+          }
+
+          // Handle delayed resume loading
+          if (pending_resume_load > 0) {
+            pending_resume_load--;
+            if (pending_resume_load == 0) {
+              // Load the auto-save state now that the game has initialized
+              FILE *debug = fopen("froglog.txt", "a");
+              if (debug) {
+                fprintf(debug, "RESUME: Loading auto-save state after game initialization\n");
+                fclose(debug);
+              }
+              load_auto_resume_state();
+            }
           }
 
           update_gbc_sound(cpu_ticks);
@@ -868,31 +883,32 @@ int user_main(int argc, char *argv[])
       if (load_gamepak(last_game_path) >= 0) {
         if (debug) {
           fprintf(debug, "Successfully loaded gamepak\n");
-          fclose(debug);
+          fflush(debug);
         }
         // Successfully loaded last played game
         
-        // Check if we should load auto-save state
-        int will_load_auto_save = (option_auto_save_state != 0);
-        
-        if (!will_load_auto_save) {
-          // Only reset GBA if we're NOT going to load a save state
-          reset_gba();
+        // For resume on boot, always start the game normally first, then load save state
+        if (debug) {
+          fprintf(debug, "RESUME: Starting game normally first, then will load auto-save\n");
+          fflush(debug);
+          fclose(debug);
         }
         
+        // Always reset and start normally for resume on boot
+        reset_gba();
         set_cpu_clock(option_clock_speed);
         sceDisplayWaitVblankStart();
         video_resolution_small();
         sound_pause = 0;
         
-        // Try to load the auto-save state AFTER all initialization (only if enabled)
-        if (will_load_auto_save) {
-          // Do basic reset first, then load save state over it
-          reset_gba();
-          load_auto_resume_state();
+        // Set a flag to load auto-save after a few frames if enabled
+        if (option_auto_save_state != 0) {
+          // Set a global flag that the main loop will check
+          extern u32 pending_resume_load;
+          pending_resume_load = 5; // Load after 5 frames
         }
         
-        // Continue with execution
+        // Continue with normal execution
         execute_arm_translate(reg[EXECUTE_CYCLES]);
         return 0;
       } else {
