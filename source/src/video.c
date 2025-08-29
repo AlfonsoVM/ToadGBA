@@ -117,6 +117,12 @@ static u16 cached_vcount = 0;  // Current scanline, cached for performance
 // BG scroll caching to reduce register reads
 static u16 cached_bg_hofs[4] = {0, 0, 0, 0};  // Horizontal scroll offsets
 static u16 cached_bg_vofs[4] = {0, 0, 0, 0};  // Vertical scroll offsets
+static u16 cached_bg_control[4] = {0, 0, 0, 0};  // BG control registers
+
+// Window coordinate caching
+static u16 cached_win0h = 0, cached_win0v = 0;
+static u16 cached_win1h = 0, cached_win1v = 0;
+static u16 cached_winin = 0, cached_winout = 0;
 
 // Layer merging system for static background optimization
 #define MAX_LAYER_CACHE_FRAMES 4
@@ -1086,7 +1092,7 @@ static void order_layers(u8 layer_flags);
 static void render_scanline_text_##combine_op##_##alpha_op(u32 layer, u32 start, u32 end, void *scanline) \
 {                                                                             \
   render_scanline_extra_variables_##combine_op##_##alpha_op(text);            \
-  u16 bg_control = pIO_REG(REG_BG0CNT + layer);                               \
+  u16 bg_control = cached_bg_control[layer];                               \
   u32 map_size = (bg_control >> 14) & 0x03;                                   \
   u32 map_width = map_widths[map_size];                                       \
 /*u32 map_height = map_heights[map_size]; */                                  \
@@ -1326,7 +1332,7 @@ render_scanline_text_builder(transparent, alpha);
 static void render_scanline_affine_##combine_op##_##alpha_op(u32 layer, u32 start, u32 end, void *scanline) \
 {                                                                             \
   render_scanline_extra_variables_##combine_op##_##alpha_op(affine);          \
-  u16 bg_control = pIO_REG(REG_BG0CNT + layer);                               \
+  u16 bg_control = cached_bg_control[layer];                               \
   u32 current_pixel;                                                          \
   s32 source_x, source_y;                                                     \
 /* u16 vcount = pIO_REG(REG_VCOUNT); */                                       \
@@ -3399,7 +3405,7 @@ void update_scanline(void)
   u8  video_mode = dispcnt & 0x07;
   current_video_mode = video_mode;  // Track for profiling
   
-  // Cache BG scroll values for this scanline
+  // Cache BG scroll and control values for this scanline
   cached_bg_hofs[0] = pIO_REG(REG_BG0HOFS);
   cached_bg_hofs[1] = pIO_REG(REG_BG1HOFS);
   cached_bg_hofs[2] = pIO_REG(REG_BG2HOFS);
@@ -3408,6 +3414,20 @@ void update_scanline(void)
   cached_bg_vofs[1] = pIO_REG(REG_BG1VOFS);
   cached_bg_vofs[2] = pIO_REG(REG_BG2VOFS);
   cached_bg_vofs[3] = pIO_REG(REG_BG3VOFS);
+  cached_bg_control[0] = pIO_REG(REG_BG0CNT);
+  cached_bg_control[1] = pIO_REG(REG_BG1CNT);
+  cached_bg_control[2] = pIO_REG(REG_BG2CNT);
+  cached_bg_control[3] = pIO_REG(REG_BG3CNT);
+  
+  // Cache window coordinates if windows are enabled
+  if ((dispcnt >> 13) != 0) {
+    cached_win0h = pIO_REG(REG_WIN0H);
+    cached_win0v = pIO_REG(REG_WIN0V);
+    cached_win1h = pIO_REG(REG_WIN1H);
+    cached_win1v = pIO_REG(REG_WIN1V);
+    cached_winin = pIO_REG(REG_WININ);
+    cached_winout = pIO_REG(REG_WINOUT);
+  }
   
   // Reset blend counter at start of frame (scanline 0)
   if (cached_vcount == 0) {
