@@ -22,12 +22,12 @@ EXTRA_TARGETS = EBOOT.PBP
 COMMON_FILE = \
  common.h \
  cpu.h cpu_common.h memory.h video.h input.h sound.h main.h message.h mh_print.h gui.h zip.h png.h \
- ku_bridge.h exception.h ch_print.h
+ ku_bridge.h exception.h ch_print.h me_background.h
 
 MAINOBJS = \
  cpu.o memory.o video.o input.o sound.o main.o message.o mh_print.o gui.o zip.o png.o \
  mips_stub.o volatile_mem.o \
- ku_bridge.o exception.o cheats.o ch_print.o gba_cc_lut.o
+ ku_bridge.o exception.o cheats.o ch_print.o gba_cc_lut.o me_background.o
 
 OBJZ = adler32.o crc32.o deflate.o infback.o inffast.o inflate.o inftrees.o trees.o zutil.o
 OBJG = compress.o uncompr.o gzclose.o gzlib.o gzread.o gzwrite.o

@@ -20,6 +20,7 @@
 
 #include "common.h"
 #include "gba_cc_lut.h"
+#include "me_background.h"
 #include "volume_icon.c"
 
 // Optimized color correction lookup tables (dynamically allocated)
@@ -3550,7 +3551,36 @@ void init_color_correction_luts(void)
     
   printf("Initializing color correction lookup tables...\n");
   
-  // Build GPSP color correction LUT
+  // Use ME for LUT generation if available
+  if (me_background_enabled) {
+    printf("Using ME for accelerated LUT generation...\n");
+    
+    // Generate GPSP LUT on ME (gamma=1.1, contrast=1.05, brightness=1.0)
+    if (me_generate_color_lut_async(0x11999, 0x10CCC, 0x10000, gpsp_color_lut) == 0) {
+      me_background_wait_complete();
+      printf("GPSP LUT generated on ME\n");
+    } else {
+      printf("ME busy, generating GPSP LUT on CPU\n");
+      goto cpu_fallback_gpsp;
+    }
+    
+    // Generate Retro LUT on ME (gamma=0.9, contrast=0.95, brightness=1.1) 
+    if (me_generate_color_lut_async(0x0E666, 0x0F333, 0x11999, retro_color_lut) == 0) {
+      me_background_wait_complete();
+      printf("Retro LUT generated on ME\n");
+    } else {
+      printf("ME busy, generating Retro LUT on CPU\n");
+      goto cpu_fallback_retro;
+    }
+  } else {
+    printf("ME not available, using CPU fallback\n");
+    goto cpu_fallback_gpsp;
+  }
+  
+  goto lut_complete;
+  
+  cpu_fallback_gpsp:
+  // Build GPSP color correction LUT on CPU
   for (int rgb555 = 0; rgb555 < 32768; rgb555++)
   {
     // Extract RGB555 components
@@ -3581,7 +3611,8 @@ void init_color_correction_luts(void)
     gpsp_color_lut[rgb555] = (r << 10) | (g << 5) | b | 0x8000;
   }
   
-  // Build Retro color correction LUT
+  cpu_fallback_retro:
+  // Build Retro color correction LUT on CPU
   for (int rgb555 = 0; rgb555 < 32768; rgb555++)
   {
     u16 r = (rgb555 >> 10) & 0x1F;
@@ -3599,6 +3630,8 @@ void init_color_correction_luts(void)
     
     retro_color_lut[rgb555] = (r << 10) | (g << 5) | b | 0x8000;
   }
+  
+  lut_complete:
   
   color_luts_initialized = 1;
   printf("Color correction LUTs initialized (128KB)\n");

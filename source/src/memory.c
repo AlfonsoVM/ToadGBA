@@ -19,6 +19,7 @@
  */
 
 #include "common.h"
+#include "me_background.h"
 
 #define CONFIG_FILENAME  "game_config.txt"
 
@@ -3831,7 +3832,69 @@ void load_state(char *savestate_filename)
 
     FILE_SEEK(savestate_file, GBA_SCREEN_SIZE + sizeof(u64), SEEK_SET);
 
-    SAVESTATE_BLOCK(read);
+    // Check if save state is compressed (has compression header)
+    u32 original_size;
+    if (FILE_READ_VARIABLE(savestate_file, original_size) == sizeof(u32)) {
+      if (original_size > 0) {
+        // Compressed save state
+        u32 compressed_size;
+        FILE_READ_VARIABLE(savestate_file, compressed_size);
+        
+        u8 *compressed_buffer = (u8 *)safe_malloc(compressed_size);
+        u8 *decompressed_buffer = (u8 *)safe_malloc(SAVESTATE_SIZE);
+        
+        if (compressed_buffer && decompressed_buffer) {
+          FILE_READ(savestate_file, compressed_buffer, compressed_size);
+          
+          // Use ME decompression if available
+          if (me_background_enabled) {
+            if (me_decompress_savestate_async(compressed_buffer, compressed_size, 
+                                            decompressed_buffer, SAVESTATE_SIZE) == 0) {
+              me_background_wait_complete();
+              
+              // Create temporary file for decompressed data
+              char temp_path[MAX_PATH];
+              sprintf(temp_path, "%stemp_savestate.tmp", dir_state);
+              SceUID temp_file = sceIoOpen(temp_path, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
+              
+              if (temp_file >= 0) {
+                sceIoWrite(temp_file, decompressed_buffer, SAVESTATE_SIZE);
+                sceIoClose(temp_file);
+                
+                // Now read from the temporary file
+                temp_file = sceIoOpen(temp_path, PSP_O_RDONLY, 0777);
+                if (temp_file >= 0) {
+                  SceUID old_file = savestate_file;
+                  savestate_file = temp_file;
+                  SAVESTATE_BLOCK(read);
+                  savestate_file = old_file;
+                  sceIoClose(temp_file);
+                }
+                
+                // Clean up temporary file
+                sceIoRemove(temp_path);
+              }
+            }
+          } else {
+            // Fallback: simple decompression on main CPU
+            // Note: This would need the same decompression function
+            // For now, just error out
+            error_msg("Compressed save state requires ME support.", 1);
+          }
+        }
+        
+        if (compressed_buffer) free(compressed_buffer);
+        if (decompressed_buffer) free(decompressed_buffer);
+      } else {
+        // Uncompressed save state (original_size = 0)
+        SAVESTATE_BLOCK(read);
+      }
+    } else {
+      // Old format save state without compression header
+      FILE_SEEK(savestate_file, GBA_SCREEN_SIZE + sizeof(u64), SEEK_SET);
+      SAVESTATE_BLOCK(read);
+    }
+    
     FILE_CLOSE(savestate_file);
 
     clear_metadata_area(METADATA_AREA_EWRAM, CLEAR_REASON_LOADING_STATE);
@@ -3906,9 +3969,46 @@ void save_state(char *savestate_filename, u16 *screen_capture)
     u64 current_time = ticker();
     FILE_WRITE_VARIABLE(savestate_file, current_time);
 
-    // Now write the savestate data to memory buffer, then to file
+    // Now write the savestate data to memory buffer
     SAVESTATE_BLOCK(write_mem);
-    FILE_WRITE(savestate_file, savestate_write_buffer, SAVESTATE_SIZE);
+    
+    // Use ME compression if available
+    if (me_background_enabled) {
+      u8 *compressed_buffer = (u8 *)safe_malloc(SAVESTATE_SIZE);
+      if (compressed_buffer) {
+        u32 compressed_size = SAVESTATE_SIZE;
+        
+        // Start ME compression asynchronously
+        if (me_compress_savestate_async(savestate_write_buffer, SAVESTATE_SIZE, 
+                                       compressed_buffer, &compressed_size) == 0) {
+          // Wait for ME to finish compression
+          me_background_wait_complete();
+          
+          // Write compressed size header, then compressed data
+          u32 original_size = SAVESTATE_SIZE;
+          FILE_WRITE_VARIABLE(savestate_file, original_size);
+          FILE_WRITE_VARIABLE(savestate_file, compressed_size);
+          FILE_WRITE(savestate_file, compressed_buffer, compressed_size);
+        } else {
+          // ME busy or failed, write uncompressed
+          u32 original_size = 0; // 0 = uncompressed marker
+          FILE_WRITE_VARIABLE(savestate_file, original_size);
+          FILE_WRITE(savestate_file, savestate_write_buffer, SAVESTATE_SIZE);
+        }
+        free(compressed_buffer);
+      } else {
+        // No memory for compression buffer, write uncompressed
+        u32 original_size = 0;
+        FILE_WRITE_VARIABLE(savestate_file, original_size);
+        FILE_WRITE(savestate_file, savestate_write_buffer, SAVESTATE_SIZE);
+      }
+    } else {
+      // ME not available, write uncompressed
+      u32 original_size = 0;
+      FILE_WRITE_VARIABLE(savestate_file, original_size);
+      FILE_WRITE(savestate_file, savestate_write_buffer, SAVESTATE_SIZE);
+    }
+    
     FILE_CLOSE(savestate_file);
   }
 

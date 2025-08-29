@@ -118,6 +118,83 @@ This mod is based on:
 - Keep border designs simple to avoid hitting the 30,000 pixel limit
 - Test different aspect ratios with your overlays (Core/Zoom/Stretch)
 
+## Latest Optimizations & Enhancements (NEW)
+
+### 🔧 Video Rendering Optimizations Re-Enabled
+- **Fast Path Rendering** - Re-enabled optimized rendering pipeline with proper blending support
+- **VCOUNT Caching** - Reduced register reads for better performance
+- **BG Register Caching** - Cached background scroll and control registers  
+- **Window Coordinate Caching** - Optimized window clipping calculations
+- **Layer Merge Optimizations** - Intelligent layer combining (disabled by default due to compatibility)
+
+### 🎵 Enhanced Audio Performance for Pokemon ROM Hacks
+- **FAST_AUDIO_MODE** - Enabled for performance-critical audio processing
+- **Volume Calculation Caching** - Cached volume computations to reduce multiplications per sample
+- **Early Exit Optimizations** - Skip processing for minimal sample counts
+- **Performance Mode Flag** - `audio_performance_mode` for heavy audio games like Pokemon Unbound
+- **Optimized for Pokemon ROM Hacks** - Significant performance improvements for Pokemon Unbound, Radical Red, and similar audio-heavy games
+
+### ⚡ PSP Media Engine (ME) Integration (NEW)
+
+FrogGBA now includes optional support for the **PSP Media Engine** to offload background processing tasks, providing significant performance improvements without timing-critical synchronization issues.
+
+#### ME Library Support
+- **Library**: [psp-media-engine-custom-core](https://github.com/mcidclan/psp-media-engine-custom-core)
+- **Purpose**: Utilize PSP's secondary 333MHz MIPS core for parallel processing  
+- **Integration**: Background tasks only - no real-time audio/video processing
+
+#### ME-Accelerated Features
+
+**1. Save State Compression**
+- **Asynchronous compression** during save operations using ME
+- **Asynchronous decompression** during load operations
+- **RLE compression** reduces save file sizes significantly  
+- **Backwards compatibility** with uncompressed save states
+- **Automatic fallback** to CPU when ME unavailable
+
+**2. Color Correction LUT Generation**
+- **Accelerated computation** of 32K color lookup tables
+- **Parallel processing** of GPSP and Retro color modes
+- **Background generation** during emulator startup
+- **No blocking** of main emulation thread
+
+#### ME Performance Benefits
+- **Save States**: Faster I/O due to compressed files, background processing
+- **Color Correction**: Faster startup, main CPU freed for other initialization tasks  
+- **Future Expansion**: Framework ready for additional background tasks (texture decompression, asset loading)
+
+#### ME Usage Notes
+- **Automatic Detection**: ME features automatically enable if library is available
+- **Graceful Degradation**: Full functionality without ME library
+- **No Timing Issues**: Only background processing, no real-time synchronization
+- **Memory Safe**: Proper cleanup and error handling
+
+### 🎮 Game Configuration System
+- **Per-Game Settings** - Automatic game detection via ROM header analysis
+- **Per-game configuration files** stored in `game_config.txt` format
+- **Customizable settings** per ROM including frame skip, audio, video optimizations, and controls
+- **Game-specific optimizations** for better compatibility with ROM hacks
+
+### Installation & ME Support
+
+#### Standard Installation
+1. Download FrogGBA release
+2. Extract to PSP memory stick
+3. Run normally - all optimizations work without ME
+
+#### Optional ME Acceleration  
+1. Clone [psp-media-engine-custom-core](https://github.com/mcidclan/psp-media-engine-custom-core)
+2. Follow the library's build instructions
+3. Link with FrogGBA during compilation
+4. ME features automatically enable when library is detected
+
+### Performance Impact Summary
+- **Pokemon ROM Hacks**: Major audio performance improvements (Pokemon Unbound now runs smoothly)
+- **Save States**: Faster save/load times with compression
+- **Color Correction**: Instant LUT generation on startup  
+- **Background Processing**: Main CPU freed for emulation while ME handles compression/decompression
+- **Smart Fallback**: All features work without ME library, with graceful CPU fallback
+
 ## Original TempGBA Features
 
 - Added gpsp kai's cheats function

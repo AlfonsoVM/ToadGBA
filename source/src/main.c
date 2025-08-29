@@ -20,6 +20,7 @@
 
 
 #include "common.h"
+#include "me_background.h"
 #include "volatile_mem.h"
 #include "gui.h"
 
@@ -816,6 +817,11 @@ static void setup_main(void)
   sound_pause = 1;
   set_sound_volume();
   init_sound();
+
+  // Initialize ME background processing for save states and LUTs
+  if (me_background_init() == 0) {
+    printf("ME background processing enabled\n");
+  }
 
   scePowerUnlock(0);
 }
