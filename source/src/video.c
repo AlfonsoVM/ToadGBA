@@ -124,7 +124,7 @@ typedef struct {
 } layer_cache_t;
 
 static layer_cache_t layer_cache[4];
-static u32 layer_merge_enabled = 0;  // DISABLED - testing if this affects blending
+static u32 layer_merge_enabled = 0;  // DISABLED - causes visual glitches and slowdown
 
 const u8 ALIGN_DATA active_layers[8] =
 {
