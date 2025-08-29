@@ -114,6 +114,10 @@ u32 fast_path_enabled = 1;  // RE-ENABLED - testing if blending still works
 // VCOUNT caching to reduce memory reads
 static u16 cached_vcount = 0;  // Current scanline, cached for performance
 
+// BG scroll caching to reduce register reads
+static u16 cached_bg_hofs[4] = {0, 0, 0, 0};  // Horizontal scroll offsets
+static u16 cached_bg_vofs[4] = {0, 0, 0, 0};  // Vertical scroll offsets
+
 // Layer merging system for static background optimization
 #define MAX_LAYER_CACHE_FRAMES 4
 typedef struct {
@@ -1086,8 +1090,8 @@ static void render_scanline_text_##combine_op##_##alpha_op(u32 layer, u32 start,
   u32 map_size = (bg_control >> 14) & 0x03;                                   \
   u32 map_width = map_widths[map_size];                                       \
 /*u32 map_height = map_heights[map_size]; */                                  \
-  u16 horizontal_offset = (pIO_REG(REG_BG0HOFS + (layer << 1)) + start) % 512; \
-  u16 vertical_offset = (cached_vcount + pIO_REG(REG_BG0VOFS + (layer << 1))) % 512; \
+  u16 horizontal_offset = (cached_bg_hofs[layer] + start) % 512; \
+  u16 vertical_offset = (cached_vcount + cached_bg_vofs[layer]) % 512; \
   u32 current_pixel;                                                          \
   u32 current_pixels;                                                         \
   u32 partial_tile_run = 0;                                                   \
@@ -3394,6 +3398,16 @@ void update_scanline(void)
   u16 *screen_offset = screen_texture + (cached_vcount << 8);
   u8  video_mode = dispcnt & 0x07;
   current_video_mode = video_mode;  // Track for profiling
+  
+  // Cache BG scroll values for this scanline
+  cached_bg_hofs[0] = pIO_REG(REG_BG0HOFS);
+  cached_bg_hofs[1] = pIO_REG(REG_BG1HOFS);
+  cached_bg_hofs[2] = pIO_REG(REG_BG2HOFS);
+  cached_bg_hofs[3] = pIO_REG(REG_BG3HOFS);
+  cached_bg_vofs[0] = pIO_REG(REG_BG0VOFS);
+  cached_bg_vofs[1] = pIO_REG(REG_BG1VOFS);
+  cached_bg_vofs[2] = pIO_REG(REG_BG2VOFS);
+  cached_bg_vofs[3] = pIO_REG(REG_BG3VOFS);
   
   // Reset blend counter at start of frame (scanline 0)
   if (cached_vcount == 0) {
