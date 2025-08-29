@@ -1394,6 +1394,13 @@ u32 menu(void)
     MSG[MSG_ON]
   };
 
+  const char *me_engine_options[] =
+  {
+    "Auto",
+    "Disabled", 
+    "Enabled"
+  };
+
   const char *scale_options[] =
   {
     MSG[MSG_SCN_SCALED_NONE],
@@ -1741,7 +1748,7 @@ u32 menu(void)
 	option_screen_scale = SCALED_X15_GU;
 	option_screen_mag = 170;
 	option_screen_filter = FILTER_BILINEAR;
-	option_compatibility_mode = 0; // Default to fast mode
+	option_me_engine = 0; // Default to Auto (detect ME library)
 	option_button_mapping = 0; // Default to X/O mapping
 	option_resume_on_boot = 0; // Default to off
 	option_auto_save_state = 0; // Default to off
@@ -2012,7 +2019,7 @@ u32 menu(void)
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], on_off_options, &option_screen_filter, 2, MSG_OPTION_MENU_HELP_2, 3),
 
-    {NULL, NULL, NULL, "Compatibility Mode: %s", (void*)on_off_options, &option_compatibility_mode, 2, MSG_OPTION_MENU_HELP_7, 5, STRING_SELECTION_OPTION},
+    {NULL, NULL, NULL, "ME Engine: %s (PSP only)", (void*)me_engine_options, &option_me_engine, 3, MSG_OPTION_MENU_HELP_7, 5, STRING_SELECTION_OPTION},
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_SHOW_FPS], on_off_options, &psp_fps_debug, 2, MSG_OPTION_MENU_HELP_SHOW_FPS, 6),
 
@@ -2716,7 +2723,7 @@ s32 save_config_file(void)
     file_options[18]  = option_overlay_offset_x;
     file_options[19]  = option_overlay_offset_y;
     file_options[20]  = option_aspect_ratio;
-    file_options[21]  = option_compatibility_mode;
+    file_options[21]  = option_me_engine;
     file_options[22]  = option_button_mapping;
     file_options[23]  = option_resume_on_boot;
     file_options[24]  = option_auto_save_state;
@@ -2851,13 +2858,13 @@ s32 load_config_file(void)
       option_overlay_offset_x = file_options[18] % 241;  // 0-240 X offset
       option_overlay_offset_y = file_options[19] % 113;  // 0-112 Y offset
       option_aspect_ratio = file_options[20] % 3;  // 0-2 aspect ratio
-      option_compatibility_mode = file_options[21] % 2;  // 0 = Fast, 1 = Accurate
+      option_me_engine = file_options[21] % 3;  // 0 = Auto, 1 = Disabled, 2 = Enabled
       option_button_mapping = file_options[22] % 2;  // 0 = X/O, 1 = O/X
       option_resume_on_boot = file_options[23] % 2;  // 0 = Off, 1 = On
       option_auto_save_state = file_options[24] % 2; // 0 = Off, 1 = On
       
-      // Update memory timing when loading config
-      set_compatibility_mode(option_compatibility_mode);
+      // Apply ME engine setting
+      apply_me_engine_option(option_me_engine);
 
       for (i = 0; i < 16; i++)
       {

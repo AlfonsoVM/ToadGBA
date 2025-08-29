@@ -161,6 +161,12 @@ void me_background_processor(void) {
 
 // Initialize ME background processing
 int me_background_init(void) {
+    // Check if ME is manually disabled (will be properly applied after config load)
+    extern u32 option_me_engine;
+    if (option_me_engine == 1) {
+        return -1; // Manually disabled
+    }
+    
     // Try to initialize ME library
     if (meLibDefaultInit() < 0) {
         return -1;
@@ -265,4 +271,27 @@ void me_background_shutdown(void) {
     }
     
     me_background_enabled = 0;
+}
+
+// Apply ME engine option setting
+void apply_me_engine_option(u32 option) {
+    switch(option) {
+        case 0: // Auto - let ME init decide
+            // Already handled by me_background_init() 
+            break;
+            
+        case 1: // Disabled - force disable ME
+            if (me_background_enabled) {
+                me_background_shutdown();
+                printf("ME engine manually disabled\n");
+            }
+            break;
+            
+        case 2: // Enabled - try to force enable (no additional action needed)
+            // me_background_init() already tries to enable
+            if (!me_background_enabled) {
+                printf("ME engine requested but unavailable\n");
+            }
+            break;
+    }
 }

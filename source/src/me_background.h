@@ -59,6 +59,9 @@ int me_generate_color_lut_async(u32 gamma, u32 contrast, u32 brightness, u16 *lu
 int me_background_task_complete(void);
 void me_background_wait_complete(void);
 
+// Apply ME engine menu option
+void apply_me_engine_option(u32 option);
+
 extern u32 me_background_enabled;
 
 #endif

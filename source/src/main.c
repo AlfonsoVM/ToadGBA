@@ -40,7 +40,7 @@ u32 option_screen_mag = 170;
 u32 option_screen_filter = FILTER_BILINEAR;
 u32 option_sound_volume = 10;
 u32 option_stack_optimize = 1;
-u32 option_compatibility_mode = 0;
+u32 option_me_engine = 0;  // 0=Auto, 1=Disabled, 2=Enabled
 u32 option_boot_mode = 0;
 u32 option_update_backup = 0;
 u32 option_screen_capture_format = 0;
@@ -818,7 +818,8 @@ static void setup_main(void)
   set_sound_volume();
   init_sound();
 
-  // Initialize ME background processing for save states and LUTs
+  // Initialize ME background processing based on user preference
+  // Note: option_me_engine will be loaded from config later, this is just initial attempt
   if (me_background_init() == 0) {
     printf("ME background processing enabled\n");
   }

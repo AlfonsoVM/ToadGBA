@@ -2897,8 +2897,7 @@ void init_memory(void)
 {
   u32 i = 0;
 
-  // Initialize memory timing based on compatibility mode
-  set_compatibility_mode(option_compatibility_mode);
+  // Memory timing uses default fast mode (compatibility mode removed)
 
   // Fill memory map regions, areas marked as NULL must be checked directly
   MAP_REGION(read, 0x0000000, 0x1000000, 1, bios.rom);
