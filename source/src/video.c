@@ -109,7 +109,7 @@ u8* tile_base_cache[4] = {NULL, NULL, NULL, NULL};
 u16 tile_base_bg_control[4] = {0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
 
 // Fast path tile rendering for common cases
-u32 fast_path_enabled = 0;  // DISABLED - may contribute to blending issues
+u32 fast_path_enabled = 1;  // RE-ENABLED - testing if blending still works
 
 // Layer merging system for static background optimization
 #define MAX_LAYER_CACHE_FRAMES 4
