@@ -19,6 +19,7 @@
  */
 
 #include "common.h"
+#include "me_background.h"
 #include <pspiofilemgr.h>
 
 #define GPSP_CONFIG_FILENAME  "froggba.cfg"
