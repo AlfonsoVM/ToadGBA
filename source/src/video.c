@@ -111,6 +111,9 @@ u16 tile_base_bg_control[4] = {0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
 // Fast path tile rendering for common cases
 u32 fast_path_enabled = 1;  // RE-ENABLED - testing if blending still works
 
+// VCOUNT caching to reduce memory reads
+static u16 cached_vcount = 0;  // Current scanline, cached for performance
+
 // Layer merging system for static background optimization
 #define MAX_LAYER_CACHE_FRAMES 4
 typedef struct {
@@ -1084,7 +1087,7 @@ static void render_scanline_text_##combine_op##_##alpha_op(u32 layer, u32 start,
   u32 map_width = map_widths[map_size];                                       \
 /*u32 map_height = map_heights[map_size]; */                                  \
   u16 horizontal_offset = (pIO_REG(REG_BG0HOFS + (layer << 1)) + start) % 512; \
-  u16 vertical_offset = (pIO_REG(REG_VCOUNT) + pIO_REG(REG_BG0VOFS + (layer << 1))) % 512; \
+  u16 vertical_offset = (cached_vcount + pIO_REG(REG_BG0VOFS + (layer << 1))) % 512; \
   u32 current_pixel;                                                          \
   u32 current_pixels;                                                         \
   u32 partial_tile_run = 0;                                                   \
@@ -1935,7 +1938,7 @@ BitmapLayerRenderStruct bitmap_mode_renderers[3] =
   }                                                                           \
   dest_ptr = scanline + obj_x;                                                \
                                                                               \
-  y_delta = pIO_REG(REG_VCOUNT) - (obj_y + middle_y);                        \
+  y_delta = cached_vcount - (obj_y + middle_y);                        \
                                                                               \
   obj_get_palette_##color_depth();                                            \
                                                                               \
@@ -2011,7 +2014,7 @@ BitmapLayerRenderStruct bitmap_mode_renderers[3] =
   }                                                                           \
   else                                                                        \
   {                                                                           \
-    vertical_offset = pIO_REG(REG_VCOUNT) - obj_y;                           \
+    vertical_offset = cached_vcount - obj_y;                           \
                                                                               \
     if (((obj_attribute_1 >> 13) & 0x01) != 0)                                \
     {                                                                         \
@@ -2126,8 +2129,8 @@ static void render_scanline_obj_##alpha_op##_##map_space(u32 priority, u32 start
   render_scanline_dest_##alpha_op *dest_ptr;                                  \
   u8 *obj_tile_base = vram + 0x10000;                                         \
   u8 *tile_ptr;                                                               \
-  u8 obj_count = obj_priority_count[priority][pIO_REG(REG_VCOUNT)];      \
-  u8 *obj_list = obj_priority_list[priority][pIO_REG(REG_VCOUNT)];       \
+  u8 obj_count = obj_priority_count[priority][cached_vcount];      \
+  u8 *obj_list = obj_priority_list[priority][cached_vcount];       \
                                                                               \
   for (obj_num = 0; obj_num < obj_count; obj_num++)                           \
   {                                                                           \
@@ -2387,7 +2390,7 @@ static void order_layers(u8 layer_flags)
       }
     }
 
-    if ((obj_priority_count[priority][pIO_REG(REG_VCOUNT)] > 0) && ((layer_flags & 0x10) != 0))
+    if ((obj_priority_count[priority][cached_vcount] > 0) && ((layer_flags & 0x10) != 0))
     {
       layer_order[layer_count] = priority | 0x04;
       layer_count++;
@@ -2731,7 +2734,7 @@ static void expand_brighten_partial_alpha(u32 *screen_src_ptr, u16 *screen_dest_
 {                                                                             \
   if (layer_condition != 0)                                                   \
   {                                                                           \
-    if (obj_alpha_count[pIO_REG(REG_VCOUNT)] != 0)                            \
+    if (obj_alpha_count[cached_vcount] != 0)                            \
     {                                                                         \
       /* Render based on special effects mode. */                             \
       u32 ALIGN_DATA screen_buffer[240];                                      \
@@ -3116,7 +3119,7 @@ static void render_scanline_conditional_bitmap(u32 start, u32 end, u16 *scanline
                                                                               \
   if (window_##window_number##_y1 > window_##window_number##_y2)              \
   {                                                                           \
-    if ((((pIO_REG(REG_VCOUNT) <= window_##window_number##_y2) || (pIO_REG(REG_VCOUNT) > window_##window_number##_y1)) || (window_##window_number##_y2 > 227)) && \
+    if ((((cached_vcount <= window_##window_number##_y2) || (cached_vcount > window_##window_number##_y1)) || (window_##window_number##_y2 > 227)) && \
         (window_##window_number##_y1 <= 227))                                 \
     {                                                                         \
       window_x_coords(window_number);                                         \
@@ -3128,7 +3131,7 @@ static void render_scanline_conditional_bitmap(u32 start, u32 end, u16 *scanline
   }                                                                           \
   else                                                                        \
   {                                                                           \
-    if ((((pIO_REG(REG_VCOUNT) >= window_##window_number##_y1) && (pIO_REG(REG_VCOUNT) < window_##window_number##_y2)) || (window_##window_number##_y2 > 227)) && \
+    if ((((cached_vcount >= window_##window_number##_y1) && (cached_vcount < window_##window_number##_y2)) || (window_##window_number##_y2 > 227)) && \
         (window_##window_number##_y1 <= 227))                                 \
     {                                                                         \
       window_x_coords(window_number);                                         \
@@ -3387,12 +3390,13 @@ render_scanline_window_builder(bitmap);
 void update_scanline(void)
 {
   u16 dispcnt = pIO_REG(REG_DISPCNT);
-  u16 *screen_offset = screen_texture + (pIO_REG(REG_VCOUNT) << 8);
+  cached_vcount = pIO_REG(REG_VCOUNT);  // Cache VCOUNT for this scanline
+  u16 *screen_offset = screen_texture + (cached_vcount << 8);
   u8  video_mode = dispcnt & 0x07;
   current_video_mode = video_mode;  // Track for profiling
   
   // Reset blend counter at start of frame (scanline 0)
-  if (pIO_REG(REG_VCOUNT) == 0) {
+  if (cached_vcount == 0) {
     blend_operations = 0;
     // Check if blend effects are enabled this frame
     u16 bldcnt = pIO_REG(REG_BLDCNT);
@@ -3428,7 +3432,7 @@ void update_scanline(void)
       {
         // Layer merging optimization for Mode 0 with multiple layers
         if (layer_merge_enabled && video_mode == 0 && layer_count >= 3) {
-          u32 scanline = pIO_REG(REG_VCOUNT);
+          u32 scanline = cached_vcount;
           
           // Check which layers are static every few scanlines
           if ((scanline & 7) == 0) {  // Check every 8 scanlines
