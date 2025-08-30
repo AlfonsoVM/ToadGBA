@@ -405,18 +405,11 @@ u32 update_gba(void)
             (*update_screen)();
           }
 
-          // Handle delayed resume loading
+          // Handle delayed resume loading (currently disabled - loading immediately instead)
+          // Keeping the code but disabled for now
           if (pending_resume_load > 0) {
             pending_resume_load--;
-            if (pending_resume_load == 0) {
-              // Load the auto-save state now that the game has initialized
-              FILE *debug = fopen("froglog.txt", "a");
-              if (debug) {
-                fprintf(debug, "RESUME: Loading auto-save state after game initialization\n");
-                fclose(debug);
-              }
-              load_auto_resume_state();
-            }
+            // Don't actually load here anymore - we load immediately after reset
           }
 
           update_gbc_sound(cpu_ticks);
@@ -908,16 +901,32 @@ int user_main(int argc, char *argv[])
         video_resolution_small();
         sound_pause = 0;
         
-        // Set a flag to load auto-save after a few frames if enabled
+        // Load auto-save state immediately if enabled
         if (option_auto_save_state != 0) {
-          // Set a global flag that the main loop will check
-          extern u32 pending_resume_load;
-          pending_resume_load = 5; // Load after 5 frames
+          FILE *debug2 = fopen("froglog.txt", "a");
+          if (debug2) {
+            fprintf(debug2, "RESUME: Loading auto-save state immediately after reset\n");
+            fclose(debug2);
+          }
+          if (load_auto_resume_state() == 0) {
+            debug2 = fopen("froglog.txt", "a");
+            if (debug2) {
+              fprintf(debug2, "RESUME: Auto-save state loaded successfully\n");
+              fclose(debug2);
+            }
+            // State loaded, reg[CHANGED_PC_STATUS] is set by load_state
+          } else {
+            debug2 = fopen("froglog.txt", "a");
+            if (debug2) {
+              fprintf(debug2, "RESUME: No auto-save state found or load failed\n");
+              fclose(debug2);
+            }
+          }
         }
         
-        // Continue with normal execution
-        execute_arm_translate(reg[EXECUTE_CYCLES]);
-        return 0;
+        // Skip the normal loading flow since we already loaded the game
+        // Jump directly to the execution part
+        goto skip_normal_loading;
       } else {
         if (debug) {
           fprintf(debug, "Failed to load gamepak\n");
@@ -954,8 +963,15 @@ int user_main(int argc, char *argv[])
     else
     {
       // Construct full path when loading from file browser
+      // Check if already absolute path to avoid path doubling for recent games
       char full_game_path[MAX_PATH];
-      sprintf(full_game_path, "%s%s", dir_roms, load_filename);
+      if (load_filename[0] == '/' || strstr(load_filename, ":/")) {
+        // Already an absolute path - use as-is
+        strcpy(full_game_path, load_filename);
+      } else {
+        // Relative path - prepend ROM directory
+        sprintf(full_game_path, "%s%s", dir_roms, load_filename);
+      }
       
       if (load_gamepak(full_game_path) < 0)
       {
@@ -966,7 +982,11 @@ int user_main(int argc, char *argv[])
     }
   }
 
+  // Normal path: reset GBA after loading
   reset_gba();
+
+skip_normal_loading:
+  // Resume path jumps here to avoid double reset
 
   set_cpu_clock(option_clock_speed);
 

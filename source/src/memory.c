@@ -4127,9 +4127,21 @@ void save_auto_resume_state(void)
     return;
   }
   
+  FILE *debug_log = fopen("froglog.txt", "a");
+  if (debug_log) {
+    fprintf(debug_log, "AUTO_SAVE: Saving auto-resume state for '%s'\n", gamepak_filename);
+    fclose(debug_log);
+  }
+  
   // Generate filename for hidden slot 11
   sprintf(savestate_ext, "_%d.svs", AUTO_RESUME_SLOT);
   change_ext(gamepak_filename, savestate_filename, savestate_ext);
+  
+  debug_log = fopen("froglog.txt", "a");
+  if (debug_log) {
+    fprintf(debug_log, "AUTO_SAVE: Saving to slot %d with filename '%s'\n", AUTO_RESUME_SLOT, savestate_filename);
+    fclose(debug_log);
+  }
   
   // Save state with a dummy screen capture for auto-save
   u16 *dummy_screen = (u16 *)safe_malloc(GBA_SCREEN_SIZE);
@@ -4137,6 +4149,12 @@ void save_auto_resume_state(void)
     memset(dummy_screen, 0, GBA_SCREEN_SIZE);  // Fill with black screen
     save_state(savestate_filename, dummy_screen);
     free(dummy_screen);
+    
+    debug_log = fopen("froglog.txt", "a");
+    if (debug_log) {
+      fprintf(debug_log, "AUTO_SAVE: Save state completed\n");
+      fclose(debug_log);
+    }
   }
 }
 
@@ -4146,6 +4164,13 @@ s32 load_auto_resume_state(void)
   char savestate_ext[16];
   struct stat file_info;
   
+  FILE *debug_log = fopen("froglog.txt", "a");
+  if (debug_log) {
+    fprintf(debug_log, "AUTO_RESUME: Starting load_auto_resume_state\n");
+    fprintf(debug_log, "AUTO_RESUME: gamepak_filename='%s'\n", gamepak_filename);
+    fclose(debug_log);
+  }
+  
   // Generate filename for hidden slot 11
   sprintf(savestate_ext, "_%d.svs", AUTO_RESUME_SLOT);
   change_ext(gamepak_filename, savestate_filename, savestate_ext);
@@ -4154,19 +4179,48 @@ s32 load_auto_resume_state(void)
   char full_savestate_path[MAX_PATH];
   sprintf(full_savestate_path, "%s%s", dir_state, savestate_filename);
   
+  debug_log = fopen("froglog.txt", "a");
+  if (debug_log) {
+    fprintf(debug_log, "AUTO_RESUME: Looking for save state at: '%s'\n", full_savestate_path);
+    fclose(debug_log);
+  }
+  
   // Check if auto-save state exists
   if (stat(full_savestate_path, &file_info) == 0) {
     // Check if file has reasonable size (at least 100KB for a valid save state)
     // GBA save states are typically 400-600KB
     if (file_info.st_size < 100 * 1024) {
       // Delete the corrupted file
+      debug_log = fopen("froglog.txt", "a");
+      if (debug_log) {
+        fprintf(debug_log, "AUTO_RESUME: Save state file too small (%ld bytes), deleting\n", file_info.st_size);
+        fclose(debug_log);
+      }
       remove(full_savestate_path);
       return -1;
     }
     
+    debug_log = fopen("froglog.txt", "a");
+    if (debug_log) {
+      fprintf(debug_log, "AUTO_RESUME: Found valid save state (%ld bytes), loading...\n", file_info.st_size);
+      fclose(debug_log);
+    }
+    
     // Try to load the state
     load_state(savestate_filename);
+    
+    debug_log = fopen("froglog.txt", "a");
+    if (debug_log) {
+      fprintf(debug_log, "AUTO_RESUME: Save state loaded successfully\n");
+      fclose(debug_log);
+    }
     return 0;
+  }
+  
+  debug_log = fopen("froglog.txt", "a");
+  if (debug_log) {
+    fprintf(debug_log, "AUTO_RESUME: No save state file found at '%s'\n", full_savestate_path);
+    fclose(debug_log);
   }
   
   return -1;
