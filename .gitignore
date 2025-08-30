@@ -40,3 +40,8 @@ buildlog.txt
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Exclude reference/archive folders that should not be committed
+tempgba-new/
+TempGBA4PSP-mod-master/
+unofficial-gpSP-kai/
