@@ -23,7 +23,6 @@
 // - block memory needs psr swapping and user mode reg swapping
 
 #include "common.h"
-#include "volatile_mem.h"
 
 // Default
 s32 idle_loop_targets = 0;
@@ -62,12 +61,14 @@ u32 ALIGN_DATA spsr[7];
 #define DCACHE_FILL_WITH_LOCK                   (0x1F) // Fill with Lock (D)
 
 
-// Optimized cache sizes - balanced for performance and stability
-#define READONLY_CODE_CACHE_SIZE          (1024 * 1024 * 2)  // 2MB for ROM/BIOS (balanced size)
-#define WRITABLE_CODE_CACHE_SIZE          (1024 * 256 * 1)   // 256KB for RAM (increased for stability)
+// gpSP-kai specialized translation cache architecture for optimal performance
+#define ROM_TRANSLATION_CACHE_SIZE   (1024 * 512 * 3)  // 1.5MB for ROM code (hot path)
+#define RAM_TRANSLATION_CACHE_SIZE   (1024 * 128 * 1)  // 128KB for RAM code (dynamic)  
+#define BIOS_TRANSLATION_CACHE_SIZE  (1024 * 128 * 1)  // 128KB for BIOS code (system calls)
 
-// Enable cache invalidation reduction to fix micro stutters
-#define PSP_REDUCE_CACHE_INVALIDATION
+// Fallback unified caches (reduced since we have specialized caches)
+#define READONLY_CODE_CACHE_SIZE          (1024 * 1024 * 2)  // 2MB fallback
+#define WRITABLE_CODE_CACHE_SIZE          (1024 * 1024 * 1)  // 1MB fallback
  /* The following parameter needs to be at least enough bytes to hold
   * the generated code for the largest instruction on your platform.
   * In most cases, that will be the ARM instruction
@@ -147,25 +148,22 @@ typedef union
 } OpcodeDataType;
 
 
-/* gpSP-kai static translation caches for optimal performance - using safe sizes */
-u8 ALIGN_DATA rom_translation_cache[READONLY_CODE_CACHE_SIZE];
+/* gpSP-kai specialized translation caches for optimal performance */
+u8 ALIGN_DATA rom_translation_cache[ROM_TRANSLATION_CACHE_SIZE];
 u8 *rom_translation_ptr = rom_translation_cache;
 
-u8 ALIGN_DATA ram_translation_cache[WRITABLE_CODE_CACHE_SIZE];
+u8 ALIGN_DATA ram_translation_cache[RAM_TRANSLATION_CACHE_SIZE];
 u8 *ram_translation_ptr = ram_translation_cache;
 
-u8 ALIGN_DATA bios_translation_cache[READONLY_CODE_CACHE_SIZE];
+u8 ALIGN_DATA bios_translation_cache[BIOS_TRANSLATION_CACHE_SIZE];
 u8 *bios_translation_ptr = bios_translation_cache;
 
 /* Fallback unified caches (for backward compatibility) */
-// Static allocation replaced with dynamic allocation
-u8 *readonly_code_cache = NULL;
-u8 *readonly_next_code = NULL;
-size_t readonly_cache_size = 0;
+u8 ALIGN_DATA readonly_code_cache[READONLY_CODE_CACHE_SIZE];
+u8 *readonly_next_code = readonly_code_cache;
 
-u8 *writable_code_cache = NULL;
-u8 *writable_next_code = NULL;
-size_t writable_cache_size = 0;
+u8 ALIGN_DATA writable_code_cache[WRITABLE_CODE_CACHE_SIZE];
+u8 *writable_next_code = writable_code_cache;
 
 /* These represent Metadata Areas. */
 u32 *rom_branch_hash[ROM_BRANCH_HASH_SIZE];
@@ -3379,9 +3377,6 @@ static u8 *translate_block_##type(u32 pc)                                     \
   switch (pc >> 24)                                                           \
   {                                                                           \
     case 0x00: /* BIOS */                                                     \
-      translation_region = TRANSLATION_REGION_READONLY;                       \
-      break;                                                                  \
-                                                                              \
     case 0x08: case 0x09: /* ROM */                                           \
     case 0x0A: case 0x0B:                                                     \
     case 0x0C: case 0x0D:                                                     \
@@ -3398,30 +3393,17 @@ static u8 *translate_block_##type(u32 pc)                                     \
       return NULL; /* internal error; satisfies the compiler */               \
   }                                                                           \
                                                                               \
-  /* Debug: Check cache pointers before use */                               \
-  if (!readonly_code_cache || !writable_code_cache) {                        \
-    printf("translate_block: ERROR - caches not initialized!\n");            \
-    printf("  readonly_code_cache = %p\n", readonly_code_cache);             \
-    printf("  writable_code_cache = %p\n", writable_code_cache);             \
-    return NULL;                                                              \
-  }                                                                           \
-                                                                              \
   switch (translation_region)                                                 \
   {                                                                           \
     case TRANSLATION_REGION_READONLY:                                         \
       translation_ptr = readonly_next_code;                                   \
-      translation_cache_limit = readonly_code_cache + readonly_cache_size - TRANSLATION_CACHE_LIMIT_THRESHOLD; \
+      translation_cache_limit = readonly_code_cache + READONLY_CODE_CACHE_SIZE - TRANSLATION_CACHE_LIMIT_THRESHOLD; \
       break;                                                                  \
     case TRANSLATION_REGION_WRITABLE:                                         \
       translation_ptr = writable_next_code;                                   \
-      translation_cache_limit = writable_code_cache + writable_cache_size - TRANSLATION_CACHE_LIMIT_THRESHOLD; \
+      translation_cache_limit = writable_code_cache + WRITABLE_CODE_CACHE_SIZE - TRANSLATION_CACHE_LIMIT_THRESHOLD; \
       break;                                                                  \
   }                                                                           \
-                                                                              \
-  /* Debug: Print cache info */                                               \
-  printf("translate_block_%s: pc=0x%08lX region=%d\n", #type, pc, translation_region); \
-  printf("  translation_ptr = %p\n", translation_ptr);                       \
-  printf("  cache_limit = %p\n", translation_cache_limit);                   \
                                                                               \
   update_metadata_area_start(pc);                                             \
                                                                               \
@@ -3924,43 +3906,17 @@ static u32 psp_cache_flush_counter = 0;
 
 void flush_translation_cache(TRANSLATION_REGION_TYPE translation_region, CACHE_FLUSH_REASON_TYPE flush_reason)
 {
-  // Safety check - caches must be initialized first
-  if (!readonly_code_cache || !writable_code_cache) {
-    printf("flush_translation_cache: WARNING - caches not initialized yet\n");
-    return;
-  }
-
 #ifdef PSP_REDUCE_CACHE_INVALIDATION
   // PSP MIPS32 Cache Invalidation Reduction Optimization 
-  // Enhanced for better Castlevania performance
+  // Only enable when user explicitly enables optimizations
   psp_cache_flush_counter++;
   
-  // More aggressive cache invalidation reduction for better frame stability
+  // Conservative cache invalidation reduction - only skip non-critical flushes
   if (flush_reason == FLUSH_REASON_NATIVE_BRANCHING) {
-    // Skip 3 out of 4 flushes for native branching (less critical)
-    if ((psp_cache_flush_counter % 4) != 0) {
+    // Skip every 2nd flush for native branching (less critical)
+    if ((psp_cache_flush_counter % 2) != 0) {
       return; // Skip this cache flush
     }
-  }
-  
-  // Additional optimization: defer cache flushes during heavy activity
-  static u32 recent_flush_count = 0;
-  static u32 last_flush_check = 0;
-  u32 current_time = (u32)(ticker() / 1000);  // Get time in milliseconds
-  
-  // Check if we're in a high-activity period (more than 8 flushes per 100ms)
-  if (current_time - last_flush_check > 100) {
-    last_flush_check = current_time;
-    if (recent_flush_count > 8 && flush_reason == FLUSH_REASON_NATIVE_BRANCHING) {
-      // During high activity, skip even more aggressively
-      if ((psp_cache_flush_counter % 8) != 0) {
-        recent_flush_count = 0;
-        return;
-      }
-    }
-    recent_flush_count = 0;
-  } else {
-    recent_flush_count++;
   }
   // Always do full cache flushes - they're too important to skip
 #endif
@@ -4098,60 +4054,9 @@ void set_cpu_mode(CPU_MODE_TYPE new_mode)
   reg[CPU_MODE] = new_mode;
 }
 
-// Track initialization state (needs to be global for cpu_term)
-static int caches_initialized = 0;
-
-static void init_translation_caches(void)
-{
-  if (caches_initialized)
-    return;
-    
-  // Debug logging
-  printf("init_translation_caches: Starting initialization\n");
-  
-  // Use static translation caches (gpSP Kai approach) for better performance
-  readonly_cache_size = READONLY_CODE_CACHE_SIZE;
-  writable_cache_size = WRITABLE_CODE_CACHE_SIZE;
-  
-  printf("init_translation_caches: Using static caches - readonly=%d KB, writable=%d KB\n", 
-         (int)(readonly_cache_size / 1024), (int)(writable_cache_size / 1024));
-  
-  // Point to static caches
-  readonly_code_cache = rom_translation_cache;
-  writable_code_cache = ram_translation_cache;
-  
-  printf("init_translation_caches: readonly_code_cache at %p\n", readonly_code_cache);
-  printf("init_translation_caches: writable_code_cache at %p\n", writable_code_cache);
-  
-  // Initialize cache pointers
-  readonly_next_code = readonly_code_cache;
-  writable_next_code = writable_code_cache;
-  
-  // Clear the caches - use 0xFF (invalid MIPS opcode) for better cache line utilization
-  memset(readonly_code_cache, 0xFF, readonly_cache_size);
-  memset(writable_code_cache, 0xFF, writable_cache_size);
-  
-  // Pre-touch cache lines to warm up the data cache
-  volatile u32 dummy;
-  for (u32 i = 0; i < readonly_cache_size; i += 64) {
-    dummy = *(volatile u32*)(readonly_code_cache + i);
-  }
-  for (u32 i = 0; i < writable_cache_size; i += 64) {
-    dummy = *(volatile u32*)(writable_code_cache + i);
-  }
-  (void)dummy; // Suppress unused variable warning
-  
-  caches_initialized = 1;
-  printf("init_translation_caches: Initialization complete\n");
-}
 
 void init_cpu(void)
 {
-  printf("init_cpu: Starting CPU initialization\n");
-  
-  // Initialize translation caches (with volatile memory if available)
-  init_translation_caches();
-  
   memset(reg, 0, sizeof(reg));
   memset(reg_mode, 0, sizeof(reg_mode));
   memset(spsr, 0, sizeof(spsr));
@@ -4199,31 +4104,6 @@ void cpu_read_savestate(SceUID savestate_file)
 void cpu_write_mem_savestate(SceUID savestate_file)
 {
   CPU_SAVESTATE_BODY(WRITE_MEM);
-}
-
-void cpu_term(void)
-{
-  // Static caches don't need to be freed, just reset the pointers
-  readonly_code_cache = NULL;
-  readonly_next_code = NULL;
-  readonly_cache_size = 0;
-  
-  writable_code_cache = NULL;
-  writable_next_code = NULL;
-  writable_cache_size = 0;
-  
-  // Clear the static arrays for next use
-  memset(rom_translation_cache, 0xFF, sizeof(rom_translation_cache));
-  memset(ram_translation_cache, 0xFF, sizeof(ram_translation_cache));
-  memset(bios_translation_cache, 0xFF, sizeof(bios_translation_cache));
-  
-  // Reset pointers to beginning of static caches
-  rom_translation_ptr = rom_translation_cache;
-  ram_translation_ptr = ram_translation_cache;
-  bios_translation_ptr = bios_translation_cache;
-  
-  // Mark caches as uninitialized for next run
-  caches_initialized = 0;
 }
 
 
