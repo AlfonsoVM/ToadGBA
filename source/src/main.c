@@ -20,9 +20,6 @@
 
 
 #include "common.h"
-#include "me_background.h"
-#include "volatile_mem.h"
-#include "gui.h"
 
 
 // Main Thread Params
@@ -30,30 +27,23 @@
 #define STACK_SIZE_KB  (512)
 #define ATTRIBUTE      (THREAD_ATTR_USER | PSP_THREAD_ATTR_CLEAR_STACK)
 
-PSP_MODULE_INFO("PSP FrogGBA", PSP_MODULE_USER, 0, 9);
+PSP_MODULE_INFO("PSP TempGBA", PSP_MODULE_USER, 0, 9);
 PSP_MAIN_THREAD_PARAMS(PRIORITY, STACK_SIZE_KB, ATTRIBUTE);
 PSP_HEAP_SIZE_KB(-800);
 
 
-u32 option_screen_scale = SCALED_X15_GU;
+u32 option_screen_scale = SCALED_USER;
 u32 option_screen_mag = 170;
 u32 option_screen_filter = FILTER_BILINEAR;
 u32 option_sound_volume = 10;
 u32 option_stack_optimize = 1;
-u32 option_me_engine = 0;  // 0=Auto, 1=Disabled, 2=Enabled
 u32 option_boot_mode = 0;
 u32 option_update_backup = 0;
 u32 option_screen_capture_format = 0;
 u32 option_enable_analog = 0;
 u32 option_analog_sensitivity = 4;
-u32 option_language = 1;
-u32 option_aspect_ratio = 0; // 0=Core Provided (3:2), 1=Zoom (fill screen), 2=Stretch (full PSP)
-
-// Overlay options
-u32 option_overlay_enabled = 0;
-u32 option_overlay_selected = 0;
-u32 option_overlay_offset_x = 120;  // X offset for game screen (0-240) - default center
-u32 option_overlay_offset_y = 56;   // Y offset for game screen (0-112) - default center
+u32 option_language = 0;
+u32 option_button_swap = 0;
 
 u32 option_frameskip_type = FRAMESKIP_AUTO;
 u32 option_frameskip_value = 9;
@@ -68,13 +58,6 @@ u32 sleep_flag = 0;
 
 u32 synchronize_flag = 1;
 u32 psp_fps_debug = 0;
-u32 option_color_correction = 0;
-u32 option_button_mapping = 0;  // 0 = X/O (X confirm, O cancel), 1 = O/X (O confirm, X cancel)
-u32 option_resume_on_boot = 0;  // 0 = off, 1 = on
-u32 option_auto_save_state = 0; // 0 = off, 1 = on
-u32 pending_resume_load = 0;    // Countdown for delayed resume loading
-u32 fast_forward_speed = 0;  // 0 = 1x (off), 1 = 2x, 2 = 3x
-u32 layer_merge_enabled = 1;  // Layer merging optimization
 
 u32 real_frame_count = 0;
 u32 virtual_frame_count = 0;
@@ -198,17 +181,7 @@ CPU_ALERT_TYPE timer_control_high(u8 timer_number, u32 value)
       else
       {
         tm->status = TIMER_PRESCALE;
-        u32 prescale_index = value & 0x03;
-        tm->prescale = prescale_table[prescale_index];
-        
-#ifdef PSP_TIMER_OPTIMIZATIONS
-        // Timer prescaling optimization - RE-ENABLED FOR TESTING
-        // Testing to see if this causes timing issues
-        // For prescale values 64+ (index 2,3), reduce precision for performance
-        if (prescale_index >= 2 && timer_number >= 2) {
-          tm->prescale = prescale_table[prescale_index] >> 1;  // Half prescale for better performance
-        }
-#endif
+        tm->prescale = prescale_table[value & 0x03];
       }
 
       tm->irq = (value >> 6) & 0x01;
@@ -401,16 +374,8 @@ u32 update_gba(void)
           if (update_input() != 0)
             continue;
 
-          if (!skip_next_frame) {
+          if (!skip_next_frame)
             (*update_screen)();
-          }
-
-          // Handle delayed resume loading (currently disabled - loading immediately instead)
-          // Keeping the code but disabled for now
-          if (pending_resume_load > 0) {
-            pending_resume_load--;
-            // Don't actually load here anymore - we load immediately after reset
-          }
 
           update_gbc_sound(cpu_ticks);
           gbc_sound_update = 0;
@@ -478,7 +443,6 @@ u32 update_gba(void)
 
     reg[EXECUTE_CYCLES] = video_count;
 
-
     for (i = 0; i < 4; i++)
     {
       CHECK_TIMER(i);
@@ -537,7 +501,6 @@ u32 update_gba(void)
   }
   while (reg[CPU_HALT_STATE] != CPU_ACTIVE);
 
-skip_normal_execution:
   return reg[EXECUTE_CYCLES];
 }
 
@@ -574,6 +537,9 @@ static void synchronize(void)
     if (reg[CPU_HALT_STATE] == CPU_STOP)
     {
       clear_screen(0);
+	  if (option_language == 0)
+      print_string(MSG[MSG_GBA_SLEEP_MODE], X_POS_CENTER, 130, COLOR15_WHITE, BG_NO_FILL);
+	  else
       print_string_gbk(MSG[MSG_GBA_SLEEP_MODE], X_POS_CENTER, 130, COLOR15_WHITE, BG_NO_FILL);
     }
 
@@ -584,29 +550,31 @@ static void synchronize(void)
     // fps
     if (psp_fps_debug != 0)
     {
-      char print_buffer[80];
-      sprintf(print_buffer, "%02ld(%02ld)", 
-              (long)fps, (long)frames_drawn);
+      char print_buffer[16];
+      sprintf(print_buffer, "%02d(%02d)", fps, frames_drawn);
+//    sprintf(print_buffer, "%02d(%02d)", fps % 100, frames_drawn);
       print_string(print_buffer, 0, 0, COLOR15_WHITE, COLOR15_BLACK);
     }
   }
 
   if (!synchronize_flag)
   {
-    char turbo_msg[32];
-    sprintf(turbo_msg, "%s %lux", MSG[MSG_TURBO], fast_forward_speed + 2);
-    
     if (psp_fps_debug != 0)
 	{
-			print_string_gbk(turbo_msg, 0, 12, COLOR15_WHITE, COLOR15_BLACK);
+		if (option_language == 0)
+			print_string(MSG[MSG_TURBO], 0, 12, COLOR15_WHITE, COLOR15_BLACK);
+		else
+			print_string_gbk(MSG[MSG_TURBO], 0, 12, COLOR15_WHITE, COLOR15_BLACK);
 	}
 	else
 	{
-		print_string_gbk(turbo_msg, 0, 0, COLOR15_WHITE, COLOR15_BLACK);
+		if (option_language == 0)
+		print_string(MSG[MSG_TURBO], 0, 0, COLOR15_WHITE, COLOR15_BLACK);
+		else
+		print_string_gbk(MSG[MSG_TURBO], 0, 0, COLOR15_WHITE, COLOR15_BLACK);
 	}
     used_frameskip_type = FRAMESKIP_MANUAL;
-    // Use different frameskip values: 2x = skip 1, 3x = skip 2
-    used_frameskip_value = (fast_forward_speed == 0) ? 1 : 2;
+    used_frameskip_value = 4;
   }
 
   skip_next_frame = 0;
@@ -701,6 +669,7 @@ static void init_main(void)
   }
 
   caches_inited = 1;
+
 }
 
 
@@ -747,7 +716,7 @@ static void load_setting_cfg(void)
   if (load_dir_cfg(filename) < 0)
   {
     sprintf(filename, MSG[MSG_ERR_LOAD_DIR_INI], main_path);
-    error_msg(filename, CONFIRMATION_CONT);
+    //error_msg(filename, CONFIRMATION_CONT);
   }
 }
 
@@ -798,6 +767,7 @@ static void setup_main(void)
     enable_home_menu = 1;
 
   load_config_file();
+  init_input();
 
   setup_callbacks();
   sceImposeSetHomePopup(enable_home_menu ^ 1);
@@ -811,139 +781,31 @@ static void setup_main(void)
   set_sound_volume();
   init_sound();
 
-  // Initialize ME background processing based on user preference
-  // Note: option_me_engine will be loaded from config later, this is just initial attempt
-  if (me_background_init() == 0) {
-    printf("ME background processing enabled\n");
-  }
-
   scePowerUnlock(0);
 }
 
 int user_main(int argc, char *argv[])
 {
   char load_filename[MAX_FILE];
-  const char *file_ext[] = { ".zip", ".gba", ".bin", ".agb", ".gbz", NULL };
+  //const char *file_ext[] = { ".zip", ".gba", ".bin", ".agb", ".gbz", NULL };
 
   setup_main();
-  
-  // Initialize overlay cache at boot
-  init_overlays_at_boot();
-  
-  // Initialize recent games tracking
-  extern void load_recent_games(void);
-  load_recent_games();
-  
-  // Load initial overlay if one is selected
-  if (option_overlay_selected > 0 && option_overlay_selected < 10) {
-    extern void load_overlay(const char *filename);
-    extern char overlay_names[][64];
-    extern int overlay_needs_update;
-    
-    
-    load_overlay(overlay_names[option_overlay_selected]);
-    overlay_needs_update = 1; // Ensure overlay gets rendered
-  }
-  
 
   gamepak_filename[0] = 0;
 
-  // NOW check for resume on boot functionality AFTER config is loaded
-  if (argc <= 1 && option_resume_on_boot != 0) {
-    FILE *debug = fopen("froglog.txt", "w");
-    if (debug) {
-      fprintf(debug, "Resume on boot enabled\n");
-      fflush(debug);
-    }
-    
-    char last_game_path[MAX_PATH];
-    if (load_last_played_game(last_game_path, MAX_PATH) == 0) {
-      if (debug) {
-        fprintf(debug, "Found last played game: %s\n", last_game_path);
-        fflush(debug);
-      }
-      
-      // Check if it's already a full path (starts with "ms0:") or just a filename
-      if (strncmp(last_game_path, "ms0:", 4) != 0) {
-        // It's just a filename, construct full path
-        char temp_filename[MAX_PATH];
-        strcpy(temp_filename, last_game_path);
-        sprintf(last_game_path, "%s%s", dir_roms, temp_filename);
-        if (debug) {
-          fprintf(debug, "Constructed full path: %s\n", last_game_path);
-          fflush(debug);
-        }
-      }
-      
-      // We have a last played game, try to load it
-      if (debug) {
-        fprintf(debug, "About to load gamepak: %s\n", last_game_path);
-        fflush(debug);
-      }
-      if (load_gamepak(last_game_path) >= 0) {
-        if (debug) {
-          fprintf(debug, "Successfully loaded gamepak\n");
-          fflush(debug);
-        }
-        // Successfully loaded last played game
-        
-        // For resume on boot, always start the game normally first, then load save state
-        if (debug) {
-          fprintf(debug, "RESUME: Starting game normally first, then will load auto-save\n");
-          fflush(debug);
-          fclose(debug);
-        }
-        
-        // Always reset and start normally for resume on boot
-        reset_gba();
-        set_cpu_clock(option_clock_speed);
-        sceDisplayWaitVblankStart();
-        video_resolution_small();
-        sound_pause = 0;
-        
-        // Load auto-save state immediately if enabled
-        if (option_auto_save_state != 0) {
-          FILE *debug2 = fopen("froglog.txt", "a");
-          if (debug2) {
-            fprintf(debug2, "RESUME: Loading auto-save state immediately after reset\n");
-            fclose(debug2);
-          }
-          if (load_auto_resume_state() == 0) {
-            debug2 = fopen("froglog.txt", "a");
-            if (debug2) {
-              fprintf(debug2, "RESUME: Auto-save state loaded successfully\n");
-              fclose(debug2);
-            }
-            // State loaded, reg[CHANGED_PC_STATUS] is set by load_state
-          } else {
-            debug2 = fopen("froglog.txt", "a");
-            if (debug2) {
-              fprintf(debug2, "RESUME: No auto-save state found or load failed\n");
-              fclose(debug2);
-            }
-          }
-        }
-        
-        // Skip the normal loading flow since we already loaded the game
-        // Jump directly to the execution part
-        goto skip_normal_loading;
-      } else {
-        if (debug) {
-          fprintf(debug, "Failed to load gamepak\n");
-          fclose(debug);
-        }
-      }
-      // If we failed to load last played game, continue with normal logic
-    } else {
-      if (debug) {
-        fprintf(debug, "No last played game found\n");
-        fclose(debug);
-      }
-    }
-    if (debug && debug != NULL) {
-      fclose(debug);
-    }
+
+  //strcpy(load_filename, "roms/game.gba");
+  sprintf(load_filename, "%sgame.gba", dir_roms);
+
+/*
+  if (load_gamepak(load_filename) < 0)
+  {
+    clear_screen(COLOR32_BLACK);
+    error_msg(MSG[MSG_ERR_LOAD_GAMEPACK], CONFIRMATION_CONT);
+    menu();
   }
+*/
+
 
   if (argc > 1)
   {
@@ -956,37 +818,15 @@ int user_main(int argc, char *argv[])
   }
   else
   {
-    if (load_file(file_ext, load_filename, dir_roms) < 0)
+    if (load_gamepak(load_filename) < 0)
     {
+      clear_screen(COLOR32_BLACK);
+      error_msg(MSG[MSG_ERR_LOAD_GAMEPACK], CONFIRMATION_CONT);
       menu();
-    }
-    else
-    {
-      // Construct full path when loading from file browser
-      // Check if already absolute path to avoid path doubling for recent games
-      char full_game_path[MAX_PATH];
-      if (load_filename[0] == '/' || strstr(load_filename, ":/")) {
-        // Already an absolute path - use as-is
-        strcpy(full_game_path, load_filename);
-      } else {
-        // Relative path - prepend ROM directory
-        sprintf(full_game_path, "%s%s", dir_roms, load_filename);
-      }
-      
-      if (load_gamepak(full_game_path) < 0)
-      {
-        clear_screen(COLOR32_BLACK);
-        error_msg(MSG[MSG_ERR_LOAD_GAMEPACK], CONFIRMATION_CONT);
-        menu();
-      }
-    }
+    } 
   }
 
-  // Normal path: reset GBA after loading
   reset_gba();
-
-skip_normal_loading:
-  // Resume path jumps here to avoid double reset
 
   set_cpu_clock(option_clock_speed);
 
@@ -1011,14 +851,11 @@ int main(int argc, char *argv[])
 
 void quit(void)
 {
-  // Auto-save is already done in menu(), no need to duplicate here
-  
   update_backup_immediately();
   save_config_file();
 
   sound_term();
   memory_term();
-  cpu_term();
   video_term();
 
   set_cpu_clock(PSP_CLOCK_222);
@@ -1190,6 +1027,9 @@ void error_msg(const char *text, u8 confirm)
       sprintf(text_buff, "%s\n\n%s", text, MSG[MSG_ERR_QUIT]);
       break;
   }
+  if (option_language == 0)
+  print_string(text_buff, 6, 6, COLOR15_WHITE, COLOR15_BLACK);
+  else
   print_string_gbk(text_buff, 6, 6, COLOR15_WHITE, COLOR15_BLACK);
   flip_screen(1);
 

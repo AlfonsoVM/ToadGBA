@@ -19,8 +19,8 @@
  */
 
 #include "common.h"
-#include "gba_cc_lut.h"
-#include "me_background.h"
+// #include "gba_cc_lut.h" // Disabled for baseline compatibility
+// #include "me_background.h" // Disabled for baseline compatibility
 #include "volume_icon.c"
 
 // Optimized color correction lookup tables (dynamically allocated)
@@ -3551,29 +3551,9 @@ void init_color_correction_luts(void)
     
   printf("Initializing color correction lookup tables...\n");
   
-  // Use ME for LUT generation if available
-  if (me_background_enabled) {
-    printf("Using ME for accelerated LUT generation...\n");
-    
-    // Generate GPSP LUT on ME (gamma=1.1, contrast=1.05, brightness=1.0)
-    if (me_generate_color_lut_async(0x11999, 0x10CCC, 0x10000, gpsp_color_lut) == 0) {
-      me_background_wait_complete();
-      printf("GPSP LUT generated on ME\n");
-    } else {
-      printf("ME busy, generating GPSP LUT on CPU\n");
-      goto cpu_fallback_gpsp;
-    }
-    
-    // Generate Retro LUT on ME (gamma=0.9, contrast=0.95, brightness=1.1) 
-    if (me_generate_color_lut_async(0x0E666, 0x0F333, 0x11999, retro_color_lut) == 0) {
-      me_background_wait_complete();
-      printf("Retro LUT generated on ME\n");
-    } else {
-      printf("ME busy, generating Retro LUT on CPU\n");
-      goto cpu_fallback_retro;
-    }
-  } else {
-    printf("ME not available, using CPU fallback\n");
+  // Use CPU for LUT generation (ME disabled for baseline compatibility)
+  {
+    printf("Using CPU for LUT generation\n");
     goto cpu_fallback_gpsp;
   }
   

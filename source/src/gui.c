@@ -19,7 +19,7 @@
  */
 
 #include "common.h"
-#include "me_background.h"
+// #include "me_background.h" // Disabled for baseline compatibility
 #include <pspiofilemgr.h>
 
 #define GPSP_CONFIG_FILENAME  "froggba.cfg"
@@ -2864,8 +2864,8 @@ s32 load_config_file(void)
       option_resume_on_boot = file_options[23] % 2;  // 0 = Off, 1 = On
       option_auto_save_state = file_options[24] % 2; // 0 = Off, 1 = On
       
-      // Apply ME engine setting
-      apply_me_engine_option(option_me_engine);
+      // ME engine disabled for baseline compatibility
+      // apply_me_engine_option(option_me_engine);
 
       for (i = 0; i < 16; i++)
       {

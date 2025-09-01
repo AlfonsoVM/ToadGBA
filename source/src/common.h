@@ -61,22 +61,23 @@
 
 // PSP MIPS32 Performance Optimizations
 // Based on SF2000 MIPS optimizations, adapted for PSP Allegrex processor
-#define PSP_MIPS32_OPTIMIZATIONS
+// Temporarily disable all MIPS32 optimizations to match baseline performance
+// #define PSP_MIPS32_OPTIMIZATIONS
 
 // Use faster, less accurate timing like gpSP-kai for better performance
 #define OLD_COUNT
 
 #ifdef PSP_MIPS32_OPTIMIZATIONS
-// Enable cycle batching to reduce dynarec overhead
-#define PSP_CYCLE_BATCHING
-#define PSP_CYCLE_BATCH_THRESHOLD 128
+// Disabled cycle batching - was adding CPU overhead to critical path
+// #define PSP_CYCLE_BATCHING
+// #define PSP_CYCLE_BATCH_THRESHOLD 128
 
-// Enable block coalescing for better cache usage
-#define PSP_BLOCK_COALESCING
-#define PSP_MAX_COALESCE_SIZE 16384
+// Temporarily disable block coalescing to test stability
+// #define PSP_BLOCK_COALESCING
+// #define PSP_MAX_COALESCE_SIZE 16384
 
-// Enable cache invalidation reduction for better performance  
-#define PSP_REDUCE_CACHE_INVALIDATION
+// Disabled cache invalidation reduction - was causing performance regression
+// #define PSP_REDUCE_CACHE_INVALIDATION
 
 // Enable sprite rendering optimizations for better performance
 #define PSP_SPRITE_OPTIMIZATIONS
