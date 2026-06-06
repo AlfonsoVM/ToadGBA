@@ -2370,10 +2370,11 @@ u32 menu(void)
 
   MAKE_MENU(main, NULL, NULL);
 
-  // Menu navigation stack (max depth 8)
+  // Menu navigation stack (max depth 8) — static to survive nested calls
   #define MENU_STACK_MAX 8
-  MenuType *menu_stack[MENU_STACK_MAX];
-  int menu_stack_top = 0;
+  static MenuType *menu_stack[MENU_STACK_MAX];
+  static int menu_stack_top = 0;
+  menu_stack_top = 0;  // reset on each menu() entry
 
   void choose_menu(MenuType *new_menu)
   {
@@ -2443,7 +2444,15 @@ u32 menu(void)
 
   sound_pause = 1;
 
-  current_screen = copy_screen();
+  // Only copy screen if a game is loaded — avoids crash on first boot
+  if (gamepak_filename[0] != 0)
+    current_screen = copy_screen();
+  else
+    current_screen = (u16 *)safe_malloc(GBA_SCREEN_SIZE);
+
+  if (current_screen)
+    memset(current_screen, 0, GBA_SCREEN_SIZE);
+
   savestate_screen = (u16 *)safe_malloc(GBA_SCREEN_SIZE);
 
   if (gamepak_filename[0] == 0)
