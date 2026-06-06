@@ -1389,8 +1389,8 @@ u32 menu(void)
   u16 color_batt_life = COLOR_BATT_NORMAL;
   static u32 counter;  counter = 0;
 
-  char filename_buffer[MAX_PATH];
-  char line_buffer[80];
+  static char filename_buffer[MAX_PATH];
+  static char line_buffer[80];
 
   static char cheat_format_str[MAX_CHEATS][25*4];
 
