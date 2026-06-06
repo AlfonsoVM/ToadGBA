@@ -1,4 +1,4 @@
-# ToadGBA - TempGBA mod by Prosty
+# ToadGBA - TempGBA/FrogGBA mod by AlfonsoVM
 
 > **ToadGBA** is a fork of [FrogGBA](https://github.com/tzubertowski/FrogGBA) with enhanced visual options:
 > AGS-101 & LCD-dim color modes, brightness control, and 4:3 pillarbox aspect ratio.
