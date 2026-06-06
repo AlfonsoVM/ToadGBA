@@ -2308,35 +2308,49 @@ u32 menu(void)
   // Overlay menu is now initialized globally to avoid scope issues
   // The overlay_options_global and overlay_menu_global are used directly from main menu
 
-  // Must be defined BEFORE cheats_misc_options[] which uses it as a function pointer
-  // reload_cheats_page uses cheats_misc_options — must be AFTER the array
+  // Declared static so reload_cheats_page (defined before this array) can access it.
+  // Initialized at runtime by reload_cheats_page() — not at compile time.
+  static MenuOptionType cheats_misc_options[12];  // 10 cheats + page selector + back
+
+  // Must be defined BEFORE MAKE_MENU(cheats_misc) which sizes from this array
   void reload_cheats_page()
   {
-    for(i = 0; i<10; i++)
+    for(i = 0; i < 10; i++)
     {
-      cheats_misc_options[i].display_string = cheat_format_str[(10 * menu_cheat_page) + i];
-      cheats_misc_options[i].current_option = &(cheats[(10 * menu_cheat_page) + i].cheat_active);
+      cheats_misc_options[i].action_function  = NULL;
+      cheats_misc_options[i].passive_function = NULL;
+      cheats_misc_options[i].sub_menu         = NULL;
+      cheats_misc_options[i].display_string   = cheat_format_str[(10 * menu_cheat_page) + i];
+      cheats_misc_options[i].options          = enable_disable_options;
+      cheats_misc_options[i].current_option   = &(cheats[(10 * menu_cheat_page) + i].cheat_active);
+      cheats_misc_options[i].num_options      = 2;
+      cheats_misc_options[i].help_string      = MSG_CHEAT_MENU_HELP_0;
+      cheats_misc_options[i].line_number      = i;
+      cheats_misc_options[i].option_type      = STRING_SELECTION_OPTION;
     }
+    // Entry 10: page selector (NUMERIC_SELECTION_OPTION)
+    cheats_misc_options[10].action_function  = reload_cheats_page;
+    cheats_misc_options[10].passive_function = NULL;
+    cheats_misc_options[10].sub_menu         = NULL;
+    cheats_misc_options[10].display_string   = MSG[MSG_CHEAT_MENU_3];
+    cheats_misc_options[10].options          = NULL;
+    cheats_misc_options[10].current_option   = &menu_cheat_page;
+    cheats_misc_options[10].num_options      = MAX_CHEATS_PAGE;
+    cheats_misc_options[10].help_string      = MSG_CHEAT_MENU_HELP_3;
+    cheats_misc_options[10].line_number      = 11;
+    cheats_misc_options[10].option_type      = NUMBER_SELECTION_OPTION;
+    // Entry 11: back (ACTION_OPTION)
+    cheats_misc_options[11].action_function  = NULL;
+    cheats_misc_options[11].passive_function = NULL;
+    cheats_misc_options[11].sub_menu         = NULL;
+    cheats_misc_options[11].display_string   = MSG[MSG_CHEAT_MENU_1];
+    cheats_misc_options[11].options          = NULL;
+    cheats_misc_options[11].current_option   = NULL;
+    cheats_misc_options[11].num_options      = 0;
+    cheats_misc_options[11].help_string      = MSG_CHEAT_MENU_HELP_1;
+    cheats_misc_options[11].line_number      = 13;
+    cheats_misc_options[11].option_type      = ACTION_OPTION;
   }
-
-  static MenuOptionType cheats_misc_options[] =
-  {
-    CHEAT_OPTION((10 * menu_cheat_page) + 0),
-    CHEAT_OPTION((10 * menu_cheat_page) + 1),
-    CHEAT_OPTION((10 * menu_cheat_page) + 2),
-    CHEAT_OPTION((10 * menu_cheat_page) + 3),
-    CHEAT_OPTION((10 * menu_cheat_page) + 4),
-    CHEAT_OPTION((10 * menu_cheat_page) + 5),
-    CHEAT_OPTION((10 * menu_cheat_page) + 6),
-    CHEAT_OPTION((10 * menu_cheat_page) + 7),
-    CHEAT_OPTION((10 * menu_cheat_page) + 8),
-    CHEAT_OPTION((10 * menu_cheat_page) + 9),
-
-    NUMERIC_SELECTION_OPTION(reload_cheats_page, MSG[MSG_CHEAT_MENU_3], &menu_cheat_page, MAX_CHEATS_PAGE, MSG_CHEAT_MENU_HELP_3, 11),
-    ACTION_OPTION(NULL, NULL, MSG[MSG_CHEAT_MENU_1], MSG_CHEAT_MENU_HELP_1, 13),
-
-    SUBMENU_OPTION(NULL, MSG[MSG_CHEAT_MENU_2], MSG_CHEAT_MENU_HELP_2, 15)
-  };
 
   MAKE_MENU(cheats_misc, NULL, NULL);
 
