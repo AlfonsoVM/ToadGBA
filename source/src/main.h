@@ -45,6 +45,21 @@
 #define BRIGHTNESS_DEFAULT 4
 #define BRIGHTNESS_MAX     8
 
+// contrast adjustment (0=flat, 4=normal, 8=high contrast)
+#define CONTRAST_MIN     0
+#define CONTRAST_DEFAULT 4
+#define CONTRAST_MAX     8
+
+// saturation adjustment (0=grayscale, 4=normal, 8=vivid)
+#define SATURATION_MIN     0
+#define SATURATION_DEFAULT 4
+#define SATURATION_MAX     8
+
+// color temperature (0=warm/amber, 4=neutral, 8=cool/blue)
+#define COLORTEMP_MIN     0
+#define COLORTEMP_DEFAULT 4
+#define COLORTEMP_MAX     8
+
 // frameskip type
 #define FRAMESKIP_AUTO   0
 #define FRAMESKIP_MANUAL 1
@@ -94,6 +109,9 @@ extern u32 synchronize_flag;
 extern u32 psp_fps_debug;
 extern u32 option_color_correction;
 extern u32 option_brightness;
+extern u32 option_contrast;
+extern u32 option_saturation;
+extern u32 option_colortemp;
 extern u32 option_button_mapping;
 extern u32 option_resume_on_boot;
 extern u32 option_auto_save_state;

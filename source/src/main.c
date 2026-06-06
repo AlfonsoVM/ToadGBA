@@ -68,7 +68,10 @@ u32 sleep_flag = 0;
 u32 synchronize_flag = 1;
 u32 psp_fps_debug = 0;
 u32 option_color_correction = COLOR_CORRECTION_OFF;
-u32 option_brightness = BRIGHTNESS_DEFAULT;  // 0=darkest, 4=normal, 8=brightest
+u32 option_brightness = BRIGHTNESS_DEFAULT;
+u32 option_contrast   = CONTRAST_DEFAULT;
+u32 option_saturation = SATURATION_DEFAULT;
+u32 option_colortemp  = COLORTEMP_DEFAULT;
 u32 option_button_mapping = 0;  // 0 = X/O (X confirm, O cancel), 1 = O/X (O confirm, X cancel)
 u32 option_resume_on_boot = 0;  // 0 = off, 1 = on
 u32 option_auto_save_state = 0; // 0 = off, 1 = on

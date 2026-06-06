@@ -157,13 +157,67 @@
     "Language        : %s",
 
     // MSG_OPTION_MENU_DEFAULT
-    "Restore",
+    "Restore defaults",
 
     // MSG_OPTION_MENU_11
     "Back",
 
     // MSG_OPTION_MENU_12
     "Advanced Optimizations: %s",
+
+    // MSG_SUBMENU_VIDEO
+    "Video settings >",
+
+    // MSG_SUBMENU_PERFORMANCE
+    "Performance >",
+
+    // MSG_SUBMENU_AUDIO
+    "Audio >",
+
+    // MSG_SUBMENU_CONTROLS
+    "Controls >",
+
+    // MSG_SUBMENU_SYSTEM
+    "System >",
+
+    // MSG_VIDEO_BRIGHTNESS
+    "Brightness      : %d",
+
+    // MSG_VIDEO_CONTRAST
+    "Contrast        : %d",
+
+    // MSG_VIDEO_SATURATION
+    "Saturation      : %d",
+
+    // MSG_VIDEO_COLORTEMP
+    "Color temp      : %d",
+
+    // MSG_HELP_SUBMENU_VIDEO
+    "Display mode, filter, color and image adjustments",
+
+    // MSG_HELP_SUBMENU_PERFORMANCE
+    "Frameskip, CPU clock and optimizations",
+
+    // MSG_HELP_SUBMENU_AUDIO
+    "Sound volume and audio settings",
+
+    // MSG_HELP_SUBMENU_CONTROLS
+    "Button mapping and input settings",
+
+    // MSG_HELP_SUBMENU_SYSTEM
+    "Language, BIOS and system settings",
+
+    // MSG_HELP_VIDEO_BRIGHTNESS
+    "Left/Right: adjust screen brightness (4=normal)",
+
+    // MSG_HELP_VIDEO_CONTRAST
+    "Left/Right: adjust contrast (4=normal, 0=flat, 8=punchy)",
+
+    // MSG_HELP_VIDEO_SATURATION
+    "Left/Right: adjust saturation (4=normal, 0=grayscale, 8=vivid)",
+
+    // MSG_HELP_VIDEO_COLORTEMP
+    "Left/Right: color temperature (0=warm/amber, 4=neutral, 8=cool/blue)",
 
     // MSG_OPTION_MENU_HELP_0
     "Left/Right:Select   Description:Settings",

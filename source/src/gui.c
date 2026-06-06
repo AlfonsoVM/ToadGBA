@@ -22,7 +22,7 @@
 #include <pspiofilemgr.h>
 
 #define GPSP_CONFIG_FILENAME  "toadgba.cfg"
-#define GPSP_CONFIG_NUM       (26 + 16) // options + game pad config + overlay options + aspect ratio + compatibility mode + button mapping + resume on boot + auto save state
+#define GPSP_CONFIG_NUM       (29 + 16) // options + game pad config + overlay options + aspect ratio + compatibility mode + button mapping + resume on boot + auto save state + brightness + contrast + saturation + colortemp
 #define GPSP_GAME_CONFIG_NUM  (7 + 16)
 
 #define COLOR_BG            COLOR15( 8, 15, 12)  // Soft mint green background
@@ -2049,46 +2049,103 @@ u32 menu(void)
 
 
   // Marker for help information, don't go past this mark (except \n)------*
-  MenuOptionType emulator_options[] =
+
+  // ── VIDEO SETTINGS SUBMENU ──────────────────────────────────────────────
+  MenuOptionType video_options[] =
   {
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_0], scale_options, &option_screen_scale, 4, MSG_OPTION_MENU_HELP_0, 0),
 
     NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_1], &option_screen_mag, 201, MSG_OPTION_MENU_HELP_1, 1),
 
-    {NULL, NULL, NULL, "Aspect Ratio: %s", (void*)aspect_ratio_options, &option_aspect_ratio, 4, 0, 2, STRING_SELECTION_OPTION},
+    {NULL, NULL, NULL, "Aspect Ratio    : %s", (void*)aspect_ratio_options, &option_aspect_ratio, 4, 0, 2, STRING_SELECTION_OPTION},
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], on_off_options, &option_screen_filter, 2, MSG_OPTION_MENU_HELP_2, 3),
 
-    {NULL, NULL, NULL, "Compatibility Mode: %s", (void*)on_off_options, &option_compatibility_mode, 2, MSG_OPTION_MENU_HELP_7, 5, STRING_SELECTION_OPTION},
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_SHOW_FPS], on_off_options, &psp_fps_debug, 2, MSG_OPTION_MENU_HELP_SHOW_FPS, 4),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_SHOW_FPS], on_off_options, &psp_fps_debug, 2, MSG_OPTION_MENU_HELP_SHOW_FPS, 6),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_COLOR_CORRECTION], color_correction_options, &option_color_correction, COLOR_CORRECTION_COUNT, MSG_OPTION_MENU_HELP_COLOR_CORRECTION, 5),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_COLOR_CORRECTION], color_correction_options, &option_color_correction, COLOR_CORRECTION_COUNT, MSG_OPTION_MENU_HELP_COLOR_CORRECTION, 7),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_BRIGHTNESS], &option_brightness, BRIGHTNESS_MAX + 1, MSG_HELP_VIDEO_BRIGHTNESS, 6),
 
-    NUMERIC_SELECTION_OPTION(NULL, "Brillo", &option_brightness, BRIGHTNESS_MAX + 1, MSG_OPTION_MENU_HELP_COLOR_CORRECTION, 8),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_CONTRAST], &option_contrast, CONTRAST_MAX + 1, MSG_HELP_VIDEO_CONTRAST, 7),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_BUTTON_MAPPING], button_mapping_options, &option_button_mapping, 2, MSG_OPTION_MENU_HELP_BUTTON_MAPPING, 8),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_SATURATION], &option_saturation, SATURATION_MAX + 1, MSG_HELP_VIDEO_SATURATION, 8),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_3], frameskip_options, &option_frameskip_type, 3, MSG_OPTION_MENU_HELP_3, 9),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLORTEMP], &option_colortemp, COLORTEMP_MAX + 1, MSG_HELP_VIDEO_COLORTEMP, 9),
 
-    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_4], &option_frameskip_value, 10, MSG_OPTION_MENU_HELP_4, 10),
+    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 10),
+  };
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_5], clock_speed_options, &option_clock_speed, 4, MSG_OPTION_MENU_HELP_5, 11), 
+  MAKE_MENU(video, NULL, NULL);
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_6], sound_volume_options, &option_sound_volume, 11, MSG_OPTION_MENU_HELP_6, 12),
+  // ── PERFORMANCE SUBMENU ─────────────────────────────────────────────────
+  MenuOptionType performance_options[] =
+  {
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_3], frameskip_options, &option_frameskip_type, 3, MSG_OPTION_MENU_HELP_3, 0),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_7], stack_optimize_options, &option_stack_optimize, 2, MSG_OPTION_MENU_HELP_7, 13),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_4], &option_frameskip_value, 10, MSG_OPTION_MENU_HELP_4, 1),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_8], yes_no_options, &option_boot_mode, 2, MSG_OPTION_MENU_HELP_8, 14),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_5], clock_speed_options, &option_clock_speed, 4, MSG_OPTION_MENU_HELP_5, 2),
 
+    {NULL, NULL, NULL, "Compatibility   : %s", (void*)on_off_options, &option_compatibility_mode, 2, MSG_OPTION_MENU_HELP_7, 3, STRING_SELECTION_OPTION},
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_9], update_backup_options, &option_update_backup, 2, MSG_OPTION_MENU_HELP_9, 15), 
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_7], stack_optimize_options, &option_stack_optimize, 2, MSG_OPTION_MENU_HELP_7, 4),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 16),
+    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
+  };
 
-    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_DEFAULT], MSG_OPTION_MENU_HELP_DEFAULT, 17),
+  MAKE_MENU(performance, NULL, NULL);
 
-    ACTION_SUBMENU_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 18)
+  // ── AUDIO SUBMENU ───────────────────────────────────────────────────────
+  MenuOptionType audio_options[] =
+  {
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_6], sound_volume_options, &option_sound_volume, 11, MSG_OPTION_MENU_HELP_6, 0),
+
+    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
+  };
+
+  MAKE_MENU(audio, NULL, NULL);
+
+  // ── CONTROLS SUBMENU ────────────────────────────────────────────────────
+  MenuOptionType controls_options[] =
+  {
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_BUTTON_MAPPING], button_mapping_options, &option_button_mapping, 2, MSG_OPTION_MENU_HELP_BUTTON_MAPPING, 0),
+
+    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
+  };
+
+  MAKE_MENU(controls, NULL, NULL);
+
+  // ── SYSTEM SUBMENU ──────────────────────────────────────────────────────
+  MenuOptionType system_options[] =
+  {
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 0),
+
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_8], yes_no_options, &option_boot_mode, 2, MSG_OPTION_MENU_HELP_8, 1),
+
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_9], update_backup_options, &option_update_backup, 2, MSG_OPTION_MENU_HELP_9, 2),
+
+    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 3),
+  };
+
+  MAKE_MENU(system, NULL, NULL);
+
+  // ── MAIN EMULATOR OPTIONS MENU ──────────────────────────────────────────
+  MenuOptionType emulator_options[] =
+  {
+    SUBMENU_OPTION(&video_menu, MSG[MSG_SUBMENU_VIDEO], MSG_HELP_SUBMENU_VIDEO, 0),
+
+    SUBMENU_OPTION(&performance_menu, MSG[MSG_SUBMENU_PERFORMANCE], MSG_HELP_SUBMENU_PERFORMANCE, 1),
+
+    SUBMENU_OPTION(&audio_menu, MSG[MSG_SUBMENU_AUDIO], MSG_HELP_SUBMENU_AUDIO, 2),
+
+    SUBMENU_OPTION(&controls_menu, MSG[MSG_SUBMENU_CONTROLS], MSG_HELP_SUBMENU_CONTROLS, 3),
+
+    SUBMENU_OPTION(&system_menu, MSG[MSG_SUBMENU_SYSTEM], MSG_HELP_SUBMENU_SYSTEM, 4),
+
+    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_DEFAULT], MSG_OPTION_MENU_HELP_DEFAULT, 5),
+
+    ACTION_SUBMENU_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 6)
   };
 
   MAKE_MENU(emulator, NULL, NULL);
@@ -2774,6 +2831,9 @@ s32 save_config_file(void)
     file_options[23]  = option_resume_on_boot;
     file_options[24]  = option_auto_save_state;
     file_options[25]  = option_brightness;
+    file_options[26]  = option_contrast;
+    file_options[27]  = option_saturation;
+    file_options[28]  = option_colortemp;
 
     for (i = 0; i < 16; i++)
     {
@@ -2909,7 +2969,10 @@ s32 load_config_file(void)
       option_button_mapping = file_options[22] % 2;  // 0 = X/O, 1 = O/X
       option_resume_on_boot = file_options[23] % 2;  // 0 = Off, 1 = On
       option_auto_save_state = file_options[24] % 2; // 0 = Off, 1 = On
-      option_brightness = file_options[25] % (BRIGHTNESS_MAX + 1); // 0-8
+      option_brightness = file_options[25] % (BRIGHTNESS_MAX + 1);
+      option_contrast   = file_options[26] % (CONTRAST_MAX   + 1);
+      option_saturation = file_options[27] % (SATURATION_MAX + 1);
+      option_colortemp  = file_options[28] % (COLORTEMP_MAX  + 1);
       
       // Update memory timing when loading config
       set_compatibility_mode(option_compatibility_mode);
@@ -2944,7 +3007,10 @@ s32 load_config_file(void)
   option_analog_sensitivity = 4;
   option_language = 1;  // Default to English
   option_color_correction = COLOR_CORRECTION_OFF;  // Default to Off
-  option_brightness = BRIGHTNESS_DEFAULT;  // Default to normal (4)
+  option_brightness = BRIGHTNESS_DEFAULT;
+  option_contrast   = CONTRAST_DEFAULT;
+  option_saturation = SATURATION_DEFAULT;
+  option_colortemp  = COLORTEMP_DEFAULT;
   option_button_mapping = 0;  // Default to X/O mapping
   option_resume_on_boot = 0;  // Default to Off
   option_auto_save_state = 0; // Default to Off

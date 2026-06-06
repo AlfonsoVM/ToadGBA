@@ -3597,17 +3597,20 @@ void init_color_correction_luts(void)
   rebuild_combined_lut();
 }
 
-// Rebuild the combined color+brightness LUT — call whenever either option changes.
-// This keeps the per-scanline loop to a single pass.
+// Rebuild the combined color+brightness+contrast+saturation+colortemp LUT.
+// Call whenever any visual option changes. Single pass per scanline.
 void rebuild_combined_lut(void)
 {
   extern u32 option_color_correction;
   extern u32 option_brightness;
+  extern u32 option_contrast;
+  extern u32 option_saturation;
+  extern u32 option_colortemp;
 
   if (!combined_lut)
     combined_lut = (u16*)safe_malloc(32768 * sizeof(u16));
 
-  // Select source color LUT (NULL = identity / no color correction)
+  // Select source color correction LUT (NULL = identity)
   u16 *src = NULL;
   switch (option_color_correction) {
     case COLOR_CORRECTION_GPSP:    src = gpsp_color_lut;   break;
@@ -3617,23 +3620,80 @@ void rebuild_combined_lut(void)
     default: src = NULL; break;
   }
 
-  // Brightness factor in 8.8 fixed point: 4 -> 256 (neutral), 0 -> 128, 8 -> 384
-  u32 factor = 128 + (option_brightness * 32);
-  u8 neutral_brightness = (option_brightness == BRIGHTNESS_DEFAULT);
+  // Pre-compute adjustment factors in 8.8 fixed point
+  // Brightness: 4->256 (neutral), 0->128, 8->384
+  u32 bright_factor = 128 + (option_brightness * 32);
+
+  // Contrast: 4->neutral, 0->flat, 8->high
+  // Applied as: out = (in - 128) * factor + 128
+  // factor: 4->256, 0->128 (soft), 8->384 (punchy)
+  u32 contrast_factor = 128 + (option_contrast * 32);
+
+  // Saturation: 4->neutral, 0->grayscale, 8->vivid
+  // factor 0..256: 0=full grayscale, 256=neutral, 512=double sat
+  u32 sat_factor = option_saturation * 64; // 0->0, 4->256, 8->512
+
+  // Color temperature: 4->neutral, 0->warm (boost R, cut B), 8->cool (cut R, boost B)
+  // Signed offset in 8.8: positive = boost, negative = cut
+  s32 temp_r = (s32)(option_colortemp - 4) * (-6); // warm=+R, cool=-R
+  s32 temp_b = (s32)(option_colortemp - 4) * ( 6); // warm=-B, cool=+B
+
+  u8 all_neutral = (option_brightness == BRIGHTNESS_DEFAULT &&
+                    option_contrast   == CONTRAST_DEFAULT   &&
+                    option_saturation == SATURATION_DEFAULT &&
+                    option_colortemp  == COLORTEMP_DEFAULT);
 
   for (int i = 0; i < 32768; i++)
   {
-    // Apply color correction (or identity)
+    // Step 1: apply color correction LUT (or identity)
     u16 c = src ? src[i] : (u16)(i | 0x8000);
 
-    if (neutral_brightness) {
+    if (all_neutral && !src) {
       combined_lut[i] = c;
-    } else {
-      u32 r = ((c >> 10) & 0x1F) * factor >> 8; if (r > 31) r = 31;
-      u32 g = ((c >>  5) & 0x1F) * factor >> 8; if (g > 31) g = 31;
-      u32 b = ( c        & 0x1F) * factor >> 8; if (b > 31) b = 31;
-      combined_lut[i] = (u16)((r << 10) | (g << 5) | b | 0x8000);
+      continue;
     }
+
+    // Extract to 0-255 range for math
+    s32 r = (((c >> 10) & 0x1F) * 255) / 31;
+    s32 g = (((c >>  5) & 0x1F) * 255) / 31;
+    s32 b = (( c        & 0x1F) * 255) / 31;
+
+    // Step 2: Brightness
+    if (option_brightness != BRIGHTNESS_DEFAULT) {
+      r = (r * (s32)bright_factor) >> 8;
+      g = (g * (s32)bright_factor) >> 8;
+      b = (b * (s32)bright_factor) >> 8;
+    }
+
+    // Step 3: Contrast — pivot around midpoint 128
+    if (option_contrast != CONTRAST_DEFAULT) {
+      r = (((r - 128) * (s32)contrast_factor) >> 8) + 128;
+      g = (((g - 128) * (s32)contrast_factor) >> 8) + 128;
+      b = (((b - 128) * (s32)contrast_factor) >> 8) + 128;
+    }
+
+    // Step 4: Saturation — blend toward luminance
+    if (option_saturation != SATURATION_DEFAULT) {
+      // Rec.601 luminance weights
+      s32 luma = (r * 77 + g * 150 + b * 29) >> 8;
+      r = luma + (((r - luma) * (s32)sat_factor) >> 8);
+      g = luma + (((g - luma) * (s32)sat_factor) >> 8);
+      b = luma + (((b - luma) * (s32)sat_factor) >> 8);
+    }
+
+    // Step 5: Color temperature
+    if (option_colortemp != COLORTEMP_DEFAULT) {
+      r += temp_r;
+      b += temp_b;
+    }
+
+    // Clamp to 0-255
+    r = r < 0 ? 0 : r > 255 ? 255 : r;
+    g = g < 0 ? 0 : g > 255 ? 255 : g;
+    b = b < 0 ? 0 : b > 255 ? 255 : b;
+
+    // Pack back to RGB555
+    combined_lut[i] = (u16)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3) | 0x8000);
   }
 }
 
