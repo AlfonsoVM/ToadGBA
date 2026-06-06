@@ -1545,6 +1545,7 @@ u32 menu(void)
   };
 
   auto void choose_menu(MenuType *new_menu);
+  auto void choose_prev_menu(void);
 
   auto void menu_init(void);
   auto void menu_term(void);
@@ -2073,7 +2074,7 @@ u32 menu(void)
 
     NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLORTEMP], &option_colortemp, COLORTEMP_MAX + 1, MSG_HELP_VIDEO_COLORTEMP, 9),
 
-    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 10),
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 10),
   };
 
   MAKE_MENU(video, NULL, NULL);
@@ -2091,7 +2092,7 @@ u32 menu(void)
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_7], stack_optimize_options, &option_stack_optimize, 2, MSG_OPTION_MENU_HELP_7, 4),
 
-    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
   };
 
   MAKE_MENU(performance, NULL, NULL);
@@ -2101,7 +2102,7 @@ u32 menu(void)
   {
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_6], sound_volume_options, &option_sound_volume, 11, MSG_OPTION_MENU_HELP_6, 0),
 
-    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
   };
 
   MAKE_MENU(audio, NULL, NULL);
@@ -2111,7 +2112,7 @@ u32 menu(void)
   {
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_BUTTON_MAPPING], button_mapping_options, &option_button_mapping, 2, MSG_OPTION_MENU_HELP_BUTTON_MAPPING, 0),
 
-    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
   };
 
   MAKE_MENU(controls, NULL, NULL);
@@ -2125,7 +2126,7 @@ u32 menu(void)
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_9], update_backup_options, &option_update_backup, 2, MSG_OPTION_MENU_HELP_9, 2),
 
-    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 3),
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 3),
   };
 
   MAKE_MENU(system, NULL, NULL);
@@ -2263,27 +2264,32 @@ u32 menu(void)
 
   MAKE_MENU(main, NULL, NULL);
 
+  // Menu navigation stack (max depth 8)
+  #define MENU_STACK_MAX 8
+  MenuType *menu_stack[MENU_STACK_MAX];
+  int menu_stack_top = 0;
 
   void choose_menu(MenuType *new_menu)
   {
-    printf("DEBUG: choose_menu called with menu: %p\n", new_menu);
-    
-    if (new_menu == NULL) {
-      printf("DEBUG: new_menu was NULL, using main_menu\n");
+    if (new_menu == NULL)
       new_menu = &main_menu;
-    }
 
-    printf("DEBUG: Setting current_menu to %p\n", new_menu);
+    // Push current menu onto stack before navigating
+    if (menu_stack_top < MENU_STACK_MAX)
+      menu_stack[menu_stack_top++] = current_menu;
+
     current_menu = new_menu;
-    
-    printf("DEBUG: new_menu->options = %p\n", new_menu->options);
-    printf("DEBUG: Setting current_option to %p\n", new_menu->options);
     current_option = new_menu->options;
-    
-    printf("DEBUG: Setting current_option_num to 0\n");
     current_option_num = 0;
-    
-    printf("DEBUG: choose_menu completed successfully\n");
+  }
+
+  void choose_prev_menu(void)
+  {
+    if (menu_stack_top > 0) {
+      current_menu = menu_stack[--menu_stack_top];
+      current_option = current_menu->options;
+      current_option_num = 0;
+    }
   }
 
   void reload_cheats_page()
@@ -2542,6 +2548,8 @@ u32 menu(void)
         break;
 
       case CURSOR_BACK:
+        choose_prev_menu();
+        break;
       case CURSOR_NONE:
         break;
     }
