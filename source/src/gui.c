@@ -1368,33 +1368,28 @@ u32 menu(void)
 	int id_language;
   u32 i;
 
-  u32 repeat = 1;
-  u32 return_value = 0;
+  static u32 repeat;      repeat = 1;
+  static u32 return_value; return_value = 0;
 
-  static u32 first_load = 0;
-  first_load = 0;  // reset on each menu() entry
+  static u32 first_load;  first_load = 0;
 
   GUI_ACTION_TYPE gui_action;
   SceCtrlData ctrl_data;
 
-  char game_title[MAX_FILE];
-  static u16 *screen_image_ptr;
-  static u16 *current_screen;
-  static u16 *savestate_screen;
-  screen_image_ptr = NULL;
-  current_screen   = NULL;
-  savestate_screen = NULL;
+  static char game_title[MAX_FILE];
+  static u16 *screen_image_ptr;  screen_image_ptr = NULL;
+  static u16 *current_screen;    current_screen   = NULL;
+  static u16 *savestate_screen;  savestate_screen = NULL;
 
-  u32 savestate_action = 0;
+  static u32 savestate_action;   savestate_action = 0;
   static char savestate_timestamps[10][40];
 
   char time_str[40];
   char batt_str[40];
   u16 color_batt_life = COLOR_BATT_NORMAL;
-  u32 counter = 0;
+  static u32 counter;  counter = 0;
 
   char filename_buffer[MAX_PATH];
-
   char line_buffer[80];
 
   static char cheat_format_str[MAX_CHEATS][25*4];
