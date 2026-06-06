@@ -1371,19 +1371,22 @@ u32 menu(void)
   u32 repeat = 1;
   u32 return_value = 0;
 
-  u32 first_load = 0;
+  static u32 first_load = 0;
+  first_load = 0;  // reset on each menu() entry
 
   GUI_ACTION_TYPE gui_action;
   SceCtrlData ctrl_data;
 
   char game_title[MAX_FILE];
-  //char backup_id[16];
-  u16 *screen_image_ptr = NULL;
-  u16 *current_screen   = NULL;
-  u16 *savestate_screen = NULL;
+  static u16 *screen_image_ptr;
+  static u16 *current_screen;
+  static u16 *savestate_screen;
+  screen_image_ptr = NULL;
+  current_screen   = NULL;
+  savestate_screen = NULL;
 
   u32 savestate_action = 0;
-  static char savestate_timestamps[10][40];  // moved to static to prevent stack overflow
+  static char savestate_timestamps[10][40];
 
   char time_str[40];
   char batt_str[40];
@@ -1394,15 +1397,17 @@ u32 menu(void)
 
   char line_buffer[80];
 
-  static char cheat_format_str[MAX_CHEATS][25*4];// gpsp kai 41*4 - moved to static to prevent stack overflow
+  static char cheat_format_str[MAX_CHEATS][25*4];
 
   static MenuType *current_menu;
   static MenuOptionType *current_option;
   MenuOptionType *display_option;
 
-  u32 menu_init_flag = 0;
+  static u32 menu_init_flag;
+  menu_init_flag = 0;
 
-  static u32 current_option_num = 0;
+  static u32 current_option_num;
+  current_option_num = 0;
   u32 menu_main_option_num = 0;
 
 
