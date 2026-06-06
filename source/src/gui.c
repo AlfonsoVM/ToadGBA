@@ -3226,16 +3226,19 @@ s32 load_dir_cfg(char *file_name)
       }
       else
       {
-        sprintf(str_buf, MSG[MSG_ERR_SET_DIR_0], current_variable);
-	    print_string(str_buf, 7, str_line, COLOR15_WHITE, COLOR15_BLACK);
-        str_line += FONTHEIGHT;
-
-        strcpy(dir_name, main_path);
-        
-        // Special case: overlay directory should have /overlays/ suffix
-        if (strcasecmp(item_name, "overlay_directory") == 0)
+        // Directory doesn't exist — try to create it silently
+        if (sceIoMkdir(current_value, 0777) >= 0)
         {
-          strcat(dir_name, "overlays/");
+          // Created successfully — use it
+          strcpy(dir_name, current_value);
+        }
+        else
+        {
+          // Can't create — fall back to main_path silently
+          strcpy(dir_name, main_path);
+
+          if (strcasecmp(item_name, "overlay_directory") == 0)
+            strcat(dir_name, "overlays/");
         }
       }
     }
@@ -3245,17 +3248,13 @@ s32 load_dir_cfg(char *file_name)
   {
     if (dir_name[0] == 0)
     {
-      sprintf(str_buf, MSG[MSG_ERR_SET_DIR_1], item_name);
-	  print_string(str_buf, 7, str_line, COLOR15_WHITE, COLOR15_BLACK);
-      str_line += FONTHEIGHT;
-
+      // Not set — use main_path and try to create the subdir
       strcpy(dir_name, main_path);
-      
-      // Special case: overlay directory should have /overlays/ suffix
+
       if (strcasecmp(item_name, "overlay_directory") == 0)
-      {
         strcat(dir_name, "overlays/");
-      }
+
+      sceIoMkdir(dir_name, 0777);
     }
   }
 
@@ -3303,16 +3302,6 @@ s32 load_dir_cfg(char *file_name)
     }
     
     check_directory(dir_overlay, item_overlay);
-
-    if (str_line > 7)
-    {
-      sprintf(str_buf, MSG[MSG_ERR_SET_DIR_2], main_path);
-      sprintf(str_buf, "%s\n\n%s", str_buf, MSG[MSG_ERR_CONT]);
-
-      str_line += FONTHEIGHT;
-	  print_string(str_buf, 7, str_line, COLOR15_WHITE, COLOR15_BLACK);
-      error_msg("", CONFIRMATION_NONE);
-    }
 
     return 0;
   }
