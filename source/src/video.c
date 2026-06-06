@@ -3716,7 +3716,7 @@ static void generate_display_list(float mag)
   extern u32 option_overlay_offset_y;
   
   /*
-  FILE *debug_log = fopen("froggba_debug.log", "a");
+  FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "generate_display_list: READING offset vars: option_overlay_offset_x=%d, option_overlay_offset_y=%d\n", 
             option_overlay_offset_x, option_overlay_offset_y);
@@ -3741,7 +3741,7 @@ static void generate_display_list(float mag)
   dy = (new_dy < 0) ? 0 : (new_dy > PSP_SCREEN_HEIGHT - dh) ? PSP_SCREEN_HEIGHT - dh : new_dy;
   
   /*
-  debug_log = fopen("froggba_debug.log", "a");
+  debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "generate_display_list: mag=%.2f, dw=%d, dh=%d, default_dx=%d, default_dy=%d, offset_x=%d, offset_y=%d, final_dx=%d, final_dy=%d\n", 
             mag, dw, dh, default_dx, default_dy, option_overlay_offset_x, option_overlay_offset_y, dx, dy);
@@ -3881,7 +3881,7 @@ static void generate_display_list_stretch(void)
   dy = 0;
   
   /*
-  FILE *debug_log = fopen("froggba_debug.log", "a");
+  FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "generate_display_list_stretch: stretching to full PSP screen dw=%d, dh=%d\n", dw, dh);
     fclose(debug_log);
@@ -4009,7 +4009,7 @@ void set_gba_resolution(void)
 {
   extern u32 option_aspect_ratio;
   
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "set_gba_resolution: option_screen_scale=%d, aspect_ratio=%d\n", 
             option_screen_scale, option_aspect_ratio);
@@ -4726,7 +4726,7 @@ void load_overlay(const char *filename)
   // Clear overlay first
   clear_overlay();
   
-  /*debug_log = fopen("froggba_debug.log", "a");
+  /*debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "load_overlay: filename='%s'\n", filename ? filename : "NULL");
     fclose(debug_log);
@@ -4739,7 +4739,7 @@ void load_overlay(const char *filename)
   // Build full path to overlay file
   sprintf(filepath, "%s%s.ovl", dir_overlay, filename);
   
-  /*debug_log = fopen("froggba_debug.log", "a");
+  /*debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "load_overlay: trying path='%s'\n", filepath);
     fclose(debug_log);
@@ -4749,7 +4749,7 @@ void load_overlay(const char *filename)
   if (overlay_buffer == NULL) {
     overlay_buffer = (u16*)safe_malloc(OVERLAY_SIZE * sizeof(u16));
     if (overlay_buffer == NULL) {
-      /*debug_log = fopen("froggba_debug.log", "a");
+      /*debug_log = fopen("toadgba_debug.log", "a");
       if (debug_log) {
         fprintf(debug_log, "load_overlay: Failed to allocate overlay buffer\n");
         fclose(debug_log);
@@ -4771,7 +4771,7 @@ void load_overlay(const char *filename)
     overlay_first_render = 1; // Reset first render flag for new overlay
     overlay_needs_update = 1; // Mark that overlay needs to be rendered
     
-    /*debug_log = fopen("froggba_debug.log", "a");
+    /*debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "load_overlay: Set overlay_loaded=1, overlay_needs_update=1, overlay_first_render=1\n");
       fclose(debug_log);
@@ -4781,7 +4781,7 @@ void load_overlay(const char *filename)
     // Build ultra-fast overlay cache
     build_overlay_cache();
     
-    /*debug_log = fopen("froggba_debug.log", "a");
+    /*debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "load_overlay: SUCCESS! Read %d bytes, overlay_loaded=%d, opaque=%d\n", 
               bytes_read, overlay_loaded, total_opaque_pixels_in_cache);
@@ -4793,7 +4793,7 @@ void load_overlay(const char *filename)
     // For now, PNG loading is not implemented
     overlay_loaded = 0;
     
-    /*debug_log = fopen("froggba_debug.log", "a");
+    /*debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "load_overlay: FAILED to open file\n");
       fclose(debug_log);

@@ -1,9 +1,12 @@
-# FrogGBA - TempGBA mod by Prosty
+# ToadGBA - TempGBA mod by Prosty
+
+> **ToadGBA** is a fork of [FrogGBA](https://github.com/tzubertowski/FrogGBA) with enhanced visual options:
+> AGS-101 & LCD-dim color modes, brightness control, and 4:3 pillarbox aspect ratio.
 
 ## Download & Installation
-![FrogGBA Icon](source/res/ICON0.png)
+![ToadGBA Icon](source/res/ICON0.png)
 
-**→ [Download the latest release here](https://github.com/tzubertowski/FrogGBA/releases) ←**
+**→ [Download the latest release here](https://github.com/tzubertowski/ToadGBA/releases) ←**
 
 You need to have a CFW installed on your PSP. 
 - Unzip the folder
@@ -27,14 +30,14 @@ This mod is based on:
 - [TempGBA](https://github.com/Nebuleon/TempGBA) by Nebuleon, Normmatt, and BassAceGold
 - TempGBA4PSP-mod (TempGBA4PSP-26731020), http://www1.axfc.net/uploader/so/3063963
 
-## What's New in FrogGBA (Since v1.0)
+## What's New in ToadGBA (Since v1.0)
 
 ### 🖼️ Overlay System (Enhanced in v0.2.2)
 - **Lightning-Fast Loading**: Completely reworked overlay system loads instantly with zero performance impact
 - **Full-Screen Borders**: Overlays can now stretch across the entire PSP display
 - **Custom Overlays/Borders**: Render PNG overlays above the game window for bezels, borders, and custom frames
 - **X/Y Offset Controls**: Position the game window anywhere on screen
-- **Online Overlay Generator**: Convert PNG images to OVL format at [froggba.onrender.com](https://froggba.onrender.com)
+- **Online Overlay Generator**: Convert PNG images to OVL format at [toadgba.onrender.com](https://toadgba.onrender.com)
 - **Multiple Overlay Slots**: Store up to 10 different overlays and switch between them
 - **RLE Compression**: Advanced compression handles pixel-dense designs without slowdown
 
@@ -95,17 +98,17 @@ This mod is based on:
 ## 🎨 How to Use Custom Overlays
 
 ### Creating Overlays
-1. **Visit the Online Generator**: Go to [froggba.onrender.com](https://froggba.onrender.com)
+1. **Visit the Online Generator**: Go to [toadgba.onrender.com](https://toadgba.onrender.com)
 2. **Upload Your PNG**: 
    - Image must be exactly 480×272 pixels (PSP screen size)
    - Transparent areas will show the game
    - Opaque areas will be the border/bezel
 3. **Download OVL File**: Click convert and download the generated .ovl file
 4. **Install on PSP**:
-   - Copy the .ovl file to `/PSP/GAME/FrogGBA/overlays/` on your Memory Stick
+   - Copy the .ovl file to `/PSP/GAME/ToadGBA/overlays/` on your Memory Stick
    - Files will appear in the Overlay menu in-game
 
-### Using Overlays in FrogGBA
+### Using Overlays in ToadGBA
 1. Press **HOME** during gameplay to open the menu
 2. Navigate to **Overlay Settings**
 3. Select your overlay from the list

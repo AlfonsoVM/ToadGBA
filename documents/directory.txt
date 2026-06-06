@@ -21,7 +21,7 @@ snapshot_directory
 
 ":"���܂܂�Ȃ��ꍇ�A�N���f�B���N�g�����t�������B
 rom_directory = roms
- roms -> ms0:/PSP/GAME/FrogGBA/roms/
+ roms -> ms0:/PSP/GAME/ToadGBA/roms/
 
 
 �ȉ��̏ꍇ�A�g�p����f�B���N�g���͋N���f�B���N�g���ɐݒ肳���B

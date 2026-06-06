@@ -21,7 +21,7 @@
 #include "common.h"
 #include <pspiofilemgr.h>
 
-#define GPSP_CONFIG_FILENAME  "froggba.cfg"
+#define GPSP_CONFIG_FILENAME  "toadgba.cfg"
 #define GPSP_CONFIG_NUM       (26 + 16) // options + game pad config + overlay options + aspect ratio + compatibility mode + button mapping + resume on boot + auto save state
 #define GPSP_GAME_CONFIG_NUM  (7 + 16)
 
@@ -322,7 +322,7 @@ void init_overlays_at_boot(void)
   SceIoDirent dirent;
   char *ext;
   
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "DEBUG: init_overlays_at_boot() called\n");
     fprintf(debug_log, "DEBUG: dir_overlay = '%s'\n", dir_overlay);
@@ -336,7 +336,7 @@ void init_overlays_at_boot(void)
   // Try to open the overlays directory
   dir = sceIoDopen(dir_overlay);
   
-  /*debug_log = fopen("froggba_debug.log", "a");
+  /*debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "DEBUG: sceIoDopen returned %d\n", dir);
     fflush(debug_log);
@@ -356,7 +356,7 @@ void init_overlays_at_boot(void)
       ext = strrchr(dirent.d_name, '.');
       if (ext && (strcasecmp(ext, ".ovl") == 0 || strcasecmp(ext, ".png") == 0))
       {
-        /*debug_log = fopen("froggba_debug.log", "a");
+        /*debug_log = fopen("toadgba_debug.log", "a");
         if (debug_log) {
           fprintf(debug_log, "DEBUG: Found overlay: %s\n", dirent.d_name);
           fflush(debug_log);
@@ -379,7 +379,7 @@ void init_overlays_at_boot(void)
     sceIoDclose(dir);
   }
   
-  /*debug_log = fopen("froggba_debug.log", "a");
+  /*debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "DEBUG: init_overlays_at_boot complete, found %u overlays\n", num_overlays);
     fflush(debug_log);
@@ -413,7 +413,7 @@ static void overlay_changed(void)
 {
   extern int overlay_needs_update;
   
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "overlay_changed: selected=%d, num_overlays=%d, name='%s'\n", 
             option_overlay_selected, num_overlays, 
@@ -435,7 +435,7 @@ static void overlay_enabled_changed(void)
   extern void load_overlay(const char *filename);
   extern char overlay_names[][64];
   
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "overlay_enabled_changed: enabled=%d, selected=%d\n", 
             option_overlay_enabled, option_overlay_selected);
@@ -476,7 +476,7 @@ static void overlay_offset_changed(void)
   set_gba_resolution();
   
   // DEBUG: Log when offset changes
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     extern u32 option_overlay_offset_x, option_overlay_offset_y;
     fprintf(debug_log, "overlay_offset_changed: new offset X=%d Y=%d, set overlay_needs_update=1, called set_gba_resolution\n", 
@@ -489,7 +489,7 @@ static void overlay_offset_changed(void)
 
 // Initialize overlay menu structure - to be called when we have MSG available
 static void init_overlay_menu_late(void) {
-    /*FILE *debug_log = fopen("froggba_debug.log", "a");
+    /*FILE *debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
         fprintf(debug_log, "init_overlay_menu_late: Setting up overlay menu callbacks\n");
         fclose(debug_log);
@@ -535,7 +535,7 @@ static void init_overlay_menu_late(void) {
 // Recent games tracking functions
 void load_recent_games(void) {
   char recent_games_file[MAX_PATH];
-  sprintf(recent_games_file, "%sfroggba_recent.txt", dir_cfg);
+  sprintf(recent_games_file, "%stoadgba_recent.txt", dir_cfg);
   
   // Initialize display array
   for (int i = 0; i < MAX_RECENT_GAMES; i++) {
@@ -565,7 +565,7 @@ void load_recent_games(void) {
 
 static void save_recent_games(void) {
   char recent_games_file[MAX_PATH];
-  sprintf(recent_games_file, "%sfroggba_recent.txt", dir_cfg);
+  sprintf(recent_games_file, "%stoadgba_recent.txt", dir_cfg);
   
   FILE *file = fopen(recent_games_file, "w");
   if (file) {
@@ -964,7 +964,7 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
 	  print_string(MSG[MSG_BROWSER_HELP], 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
       // Show mod credit instead of ROM Buffer
-      print_string("FrogGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+      print_string("ToadGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
       // PSP controller - hold
       if (get_pad_input(PSP_CTRL_HOLD) != 0)
@@ -1310,7 +1310,7 @@ u32 menu(void)
   }
   
   // Use the same debug log as HOME button
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "DEBUG: menu() function entry point\n");
     fprintf(debug_log, "DEBUG: overlay_menu_global address: %p\n", &overlay_menu_global);
@@ -2281,7 +2281,7 @@ u32 menu(void)
     }
 
 	print_string(MSG[current_option->help_string], 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
-    print_string("FrogGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+    print_string("ToadGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
     // PSP controller - hold
     if (get_pad_input(PSP_CTRL_HOLD) != 0)

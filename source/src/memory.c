@@ -3589,7 +3589,7 @@ static s32 load_gamepak_raw(char *name)
 
 s32 load_gamepak(char *name)
 {
-  FILE *debug_log = fopen("froggba_debug.log", "a");
+  FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "load_gamepak: Starting to load game: %s\n", name);
     fclose(debug_log);
@@ -3687,7 +3687,7 @@ s32 load_gamepak(char *name)
 
   // Save the last played game with the original full path
   if (file_size >= 0) {
-    FILE *debug_log = fopen("froggba_debug.log", "a");
+    FILE *debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "load_gamepak: Saving last played game with full path: %s\n", original_full_path);
       fclose(debug_log);

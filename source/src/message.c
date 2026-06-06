@@ -82,7 +82,7 @@ const char *message[4][MSG_END] =
     "�X���[�v",
 
     // MSG_MAIN_MENU_11
-    "FrogGBA�̏I��",
+    "ToadGBA�̏I��",
 
     //MSG_MAIN_MENU_OVERLAY
     "Overlay",

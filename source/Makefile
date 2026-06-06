@@ -15,7 +15,7 @@ PSP_FW_VERSION = 300
 PSP_LARGE_MEMORY = 0
 
 PSP_EBOOT_ICON = res/ICON0.png
-PSP_EBOOT_TITLE = FrogGBA
+PSP_EBOOT_TITLE = ToadGBA
 
 EXTRA_TARGETS = EBOOT.PBP
 
@@ -34,7 +34,7 @@ OBJG = compress.o uncompr.o gzclose.o gzlib.o gzread.o gzwrite.o
 
 OBJS = $(MAINOBJS) $(OBJZ) $(OBJG)
 
-TARGET = FrogGBA
+TARGET = ToadGBA
 
 VPATH = src src/zlib
 

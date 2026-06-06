@@ -57,7 +57,7 @@
     "Sleep",
 
     // MSG_MAIN_MENU_11
-    "Exit FrogGBA",
+    "Exit ToadGBA",
 
     //MSG_MAIN_MENU_OVERLAY
     "Overlay options",
@@ -669,7 +669,7 @@
     "待机",
 
     // MSG_MAIN_MENU_11
-    "退出FrogGBA",
+    "退出ToadGBA",
 
     //MSG_MAIN_MENU_OVERLAY
     "覆盖层选项",
@@ -1283,7 +1283,7 @@
     "待機",
 
     // MSG_MAIN_MENU_11
-    "退出FrogGBA",
+    "退出ToadGBA",
 
     //MSG_MAIN_MENU_OVERLAY
     "覆蓋層選項",

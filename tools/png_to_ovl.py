@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PNG to OVL converter for FrogGBA overlay system
+PNG to OVL converter for ToadGBA overlay system
 Converts PNG images to .ovl format (RGB5551)
 
 Usage: python png_to_ovl.py input.png output.ovl

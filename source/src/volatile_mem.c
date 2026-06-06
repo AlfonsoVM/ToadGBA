@@ -1,4 +1,4 @@
-/* FrogGBA PSP Volatile Memory Support Implementation 
+/* ToadGBA PSP Volatile Memory Support Implementation 
  * Based on DaedalusX64 implementation */
 
 #include "volatile_mem.h"

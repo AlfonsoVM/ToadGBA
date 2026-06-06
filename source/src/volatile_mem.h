@@ -1,4 +1,4 @@
-/* FrogGBA PSP Volatile Memory Support
+/* ToadGBA PSP Volatile Memory Support
  *
  * This provides access to an additional 4MB of RAM on PSP
  * through the volatile memory partition (partition 5).
