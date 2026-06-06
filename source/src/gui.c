@@ -2136,24 +2136,13 @@ u32 menu(void)
 
 
 
-  // Menu navigation stack (max depth 8) — must be defined BEFORE option arrays
-  // that reference choose_prev_menu/restore_defaults as function pointers
+  // Menu navigation stack — must be before the option arrays
   #define MENU_STACK_MAX 8
   static MenuType *menu_stack[MENU_STACK_MAX];
   static int menu_stack_top = 0;
   menu_stack_top = 0;
 
-  void choose_menu(MenuType *new_menu)
-  {
-    if (new_menu == NULL)
-      new_menu = &main_menu;
-    if (menu_stack_top < MENU_STACK_MAX)
-      menu_stack[menu_stack_top++] = current_menu;
-    current_menu = new_menu;
-    current_option = new_menu->options;
-    current_option_num = 0;
-  }
-
+  // choose_prev_menu doesn't reference main_menu — safe before MAKE_MENU(main)
   void choose_prev_menu(void)
   {
     if (menu_stack_top > 0) {
@@ -2438,6 +2427,18 @@ u32 menu(void)
 
 
   MAKE_MENU(main, NULL, NULL);
+
+  // choose_menu references main_menu — must be AFTER MAKE_MENU(main)
+  void choose_menu(MenuType *new_menu)
+  {
+    if (new_menu == NULL)
+      new_menu = &main_menu;
+    if (menu_stack_top < MENU_STACK_MAX)
+      menu_stack[menu_stack_top++] = current_menu;
+    current_menu = new_menu;
+    current_option = new_menu->options;
+    current_option_num = 0;
+  }
 
 
   sound_pause = 1;
