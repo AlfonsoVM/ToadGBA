@@ -180,6 +180,42 @@
     // MSG_SUBMENU_SYSTEM
     "System >",
 
+    // MSG_SUBMENU_DIRECTORIES
+    "Directories >",
+
+    // MSG_DIR_ROMS
+    "ROMs folder     :",
+
+    // MSG_DIR_SAVE
+    "Saves folder    :",
+
+    // MSG_DIR_STATE
+    "Savestates      :",
+
+    // MSG_DIR_CHEAT
+    "Cheats folder   :",
+
+    // MSG_DIR_SNAP
+    "Screenshots     :",
+
+    // MSG_HELP_SUBMENU_DIRECTORIES
+    "Configure where ToadGBA looks for ROMs, saves and other files",
+
+    // MSG_HELP_DIR_ROMS
+    "O:Browse for ROMs folder",
+
+    // MSG_HELP_DIR_SAVE
+    "O:Browse for saves folder",
+
+    // MSG_HELP_DIR_STATE
+    "O:Browse for savestates folder",
+
+    // MSG_HELP_DIR_CHEAT
+    "O:Browse for cheats folder",
+
+    // MSG_HELP_DIR_SNAP
+    "O:Browse for screenshots folder",
+
     // MSG_VIDEO_BRIGHTNESS
     "Brightness      : %d",
 

@@ -745,8 +745,34 @@ static void load_setting_cfg(void)
 
   if (load_dir_cfg(filename) < 0)
   {
-    sprintf(filename, MSG[MSG_ERR_LOAD_DIR_INI], main_path);
-    error_msg(filename, CONFIRMATION_CONT);
+    // dir.ini missing — create it with sensible defaults so the user
+    // never sees this error again on subsequent boots
+    FILE *f = fopen(filename, "w");
+    if (f)
+    {
+      fprintf(f, "# ToadGBA directory config\n");
+      fprintf(f, "# Edit this file or use System > Directories in the emulator menu\n\n");
+      fprintf(f, "rom_directory = roms\n\n");
+      fprintf(f, "save_directory = save\n\n");
+      fprintf(f, "save_state_directory = state\n\n");
+      fprintf(f, "game_config_directory = cfg\n\n");
+      fprintf(f, "snapshot_directory = ms0:/PICTURE\n\n");
+      fprintf(f, "cheat_directory = cheat\n\n");
+      fprintf(f, "overlay_directory = overlays\n");
+      fclose(f);
+
+      // Also create the subdirectories so they exist from the start
+      char subdir[MAX_PATH];
+      const char *subdirs[] = { "roms", "save", "state", "cfg", "cheat", "overlays", NULL };
+      for (int i = 0; subdirs[i]; i++) {
+        sprintf(subdir, "%s%s", main_path, subdirs[i]);
+        sceIoMkdir(subdir, 0777);
+      }
+
+      // Reload now that the file exists
+      load_dir_cfg(filename);
+    }
+    // If we still couldn't create it, silently use defaults — no popup
   }
 }
 

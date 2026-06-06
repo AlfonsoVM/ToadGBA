@@ -1568,6 +1568,11 @@ u32 menu(void)
   auto void submenu_cheats_misc(void);
 
   auto void menu_load_file(void);
+  auto void browse_dir_roms(void);
+  auto void browse_dir_save(void);
+  auto void browse_dir_state(void);
+  auto void browse_dir_cheat(void);
+  auto void browse_dir_snap(void);
 
   auto void submenu_emulator(void);
   auto void submenu_gamepad(void);
@@ -1687,7 +1692,76 @@ u32 menu(void)
     }
   }
 
-  void menu_reset(void)
+  // Helper: let user browse to a directory and update dir_var + dir.ini
+  void browse_for_dir(char *dir_var, const char *ini_key)
+  {
+    // Use load_file with no wildcards — user navigates dirs and confirms with O/X
+    const char *no_ext[] = { NULL };
+    char selected[MAX_PATH];
+
+    // Start browser in the current value of dir_var
+    char start_dir[MAX_PATH];
+    strcpy(start_dir, dir_var);
+
+    // load_file returns the selected file; we want the directory instead.
+    // We repurpose it: if user presses confirm on a dir entry ".." or navigates
+    // and presses Select (CURSOR_DEFAULT) we capture getcwd.
+    // Simplest approach: use load_file, ignore file result, use its final cwd.
+    char dummy[MAX_PATH];
+    dummy[0] = '\0';
+    load_file(no_ext, dummy, start_dir);
+
+    // After load_file returns, getcwd gives us where the user ended up
+    char new_dir[MAX_PATH];
+    if (getcwd(new_dir, MAX_PATH) != NULL) {
+      // Ensure trailing slash
+      if (new_dir[strlen(new_dir) - 1] != '/')
+        strcat(new_dir, "/");
+      strcpy(dir_var, new_dir);
+
+      // Persist to dir.ini
+      char ini_path[MAX_PATH];
+      sprintf(ini_path, "%sdir.ini", main_path);
+      // Read existing, rewrite with updated key
+      char lines[16][256];
+      int nlines = 0;
+      FILE *f = fopen(ini_path, "r");
+      if (f) {
+        while (nlines < 15 && fgets(lines[nlines], 256, f))
+          nlines++;
+        fclose(f);
+      }
+      // Find and update the matching key
+      u8 found = 0;
+      for (int k = 0; k < nlines; k++) {
+        char var[128], val[128];
+        if (parse_config_line(lines[k], var, val) != -1 &&
+            strcasecmp(var, ini_key) == 0) {
+          sprintf(lines[k], "%s = %s\n", ini_key, new_dir);
+          found = 1;
+          break;
+        }
+      }
+      if (!found && nlines < 15)
+        sprintf(lines[nlines++], "%s = %s\n", ini_key, new_dir);
+
+      f = fopen(ini_path, "w");
+      if (f) {
+        for (int k = 0; k < nlines; k++)
+          fputs(lines[k], f);
+        fclose(f);
+      }
+    }
+
+    menu_init();
+    choose_menu(current_menu);
+  }
+
+  void browse_dir_roms(void)  { browse_for_dir(dir_roms,  "rom_directory"); }
+  void browse_dir_save(void)  { browse_for_dir(dir_save,  "save_directory"); }
+  void browse_dir_state(void) { browse_for_dir(dir_state, "save_state_directory"); }
+  void browse_dir_cheat(void) { browse_for_dir(dir_cheat, "cheat_directory"); }
+  void browse_dir_snap(void)  { browse_for_dir(dir_snap,  "snapshot_directory"); }
   {
     if (!first_load)
     {
@@ -2120,6 +2194,19 @@ u32 menu(void)
 
   MAKE_MENU(controls, NULL, NULL);
 
+  // ── DIRECTORIES SUBMENU ─────────────────────────────────────────────────
+  MenuOptionType directories_options[] =
+  {
+    ACTION_OPTION(browse_dir_roms,  NULL, MSG[MSG_DIR_ROMS],  MSG_HELP_DIR_ROMS,  0),
+    ACTION_OPTION(browse_dir_save,  NULL, MSG[MSG_DIR_SAVE],  MSG_HELP_DIR_SAVE,  1),
+    ACTION_OPTION(browse_dir_state, NULL, MSG[MSG_DIR_STATE], MSG_HELP_DIR_STATE, 2),
+    ACTION_OPTION(browse_dir_cheat, NULL, MSG[MSG_DIR_CHEAT], MSG_HELP_DIR_CHEAT, 3),
+    ACTION_OPTION(browse_dir_snap,  NULL, MSG[MSG_DIR_SNAP],  MSG_HELP_DIR_SNAP,  4),
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
+  };
+
+  MAKE_MENU(directories, NULL, NULL);
+
   // ── SYSTEM SUBMENU ──────────────────────────────────────────────────────
   MenuOptionType system_options[] =
   {
@@ -2129,7 +2216,9 @@ u32 menu(void)
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_9], update_backup_options, &option_update_backup, 2, MSG_OPTION_MENU_HELP_9, 2),
 
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 3),
+    SUBMENU_OPTION(&directories_menu, MSG[MSG_SUBMENU_DIRECTORIES], MSG_HELP_SUBMENU_DIRECTORIES, 3),
+
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 4),
   };
 
   MAKE_MENU(system, NULL, NULL);
