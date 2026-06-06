@@ -2388,7 +2388,30 @@ u32 menu(void)
       }
     }
 
-	print_string(MSG[current_option->help_string], 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+    // Print help text with dynamic button labels based on current mapping
+    // mapping=0 (X/O): confirm=O, cancel=X
+    // mapping=1 (O/X): confirm=X, cancel=O
+    {
+      const char *raw_help = MSG[current_option->help_string];
+      if (raw_help && (strstr(raw_help, "X:") || strstr(raw_help, "O:"))) {
+        static char help_buf[80];
+        const char *confirm = (option_button_mapping == 0) ? "O" : "X";
+        const char *cancel  = (option_button_mapping == 0) ? "X" : "O";
+        char *dst = help_buf;
+        const char *src = raw_help;
+        while (*src && (dst - help_buf) < 78) {
+          if (src[1] == ':') {
+            if (src[0] == 'X') { *dst++ = *cancel;  src++; continue; }
+            if (src[0] == 'O') { *dst++ = *confirm; src++; continue; }
+          }
+          *dst++ = *src++;
+        }
+        *dst = '\0';
+        print_string(help_buf, 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+      } else {
+        print_string(raw_help ? raw_help : "", 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+      }
+    }
     print_string("ToadGBA", 434, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
     // PSP controller - hold
