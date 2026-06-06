@@ -2136,6 +2136,65 @@ u32 menu(void)
 
 
 
+  // Menu navigation stack (max depth 8) — must be defined BEFORE option arrays
+  // that reference choose_prev_menu/restore_defaults as function pointers
+  #define MENU_STACK_MAX 8
+  static MenuType *menu_stack[MENU_STACK_MAX];
+  static int menu_stack_top = 0;
+  menu_stack_top = 0;
+
+  void choose_menu(MenuType *new_menu)
+  {
+    if (new_menu == NULL)
+      new_menu = &main_menu;
+    if (menu_stack_top < MENU_STACK_MAX)
+      menu_stack[menu_stack_top++] = current_menu;
+    current_menu = new_menu;
+    current_option = new_menu->options;
+    current_option_num = 0;
+  }
+
+  void choose_prev_menu(void)
+  {
+    if (menu_stack_top > 0) {
+      current_menu = menu_stack[--menu_stack_top];
+      current_option = current_menu->options;
+      current_option_num = 0;
+    }
+  }
+
+  void restore_defaults(void)
+  {
+    option_screen_scale        = SCALED_X15_GU;
+    option_screen_mag          = 170;
+    option_screen_filter       = FILTER_BILINEAR;
+    psp_fps_debug              = 0;
+    option_frameskip_type      = FRAMESKIP_AUTO;
+    option_frameskip_value     = 9;
+    option_clock_speed         = PSP_CLOCK_333;
+    option_sound_volume        = 10;
+    option_stack_optimize      = 1;
+    option_boot_mode           = 0;
+    option_update_backup       = 1;
+    option_screen_capture_format = 0;
+    option_enable_analog       = 0;
+    option_analog_sensitivity  = 4;
+    option_language            = 1;
+    option_aspect_ratio        = 0;
+    option_compatibility_mode  = 0;
+    option_color_correction    = COLOR_CORRECTION_OFF;
+    option_brightness          = BRIGHTNESS_DEFAULT;
+    option_contrast            = CONTRAST_DEFAULT;
+    option_saturation          = SATURATION_DEFAULT;
+    option_colortemp           = COLORTEMP_DEFAULT;
+    option_sharpness           = SHARPNESS_DEFAULT;
+    option_button_mapping      = 0;
+    option_resume_on_boot      = 0;
+    option_auto_save_state     = 0;
+    extern void rebuild_combined_lut(void);
+    rebuild_combined_lut();
+  }
+
   // Marker for help information, don't go past this mark (except \n)------*
 
   // ── VIDEO SETTINGS SUBMENU ──────────────────────────────────────────────
@@ -2369,68 +2428,6 @@ u32 menu(void)
 
 
   MAKE_MENU(main, NULL, NULL);
-
-  // Menu navigation stack (max depth 8)
-  #define MENU_STACK_MAX 8
-  static MenuType *menu_stack[MENU_STACK_MAX];
-  static int menu_stack_top = 0;
-  menu_stack_top = 0;  // reset on each entry to menu()
-
-  void choose_menu(MenuType *new_menu)
-  {
-    if (new_menu == NULL)
-      new_menu = &main_menu;
-
-    // Push current menu onto stack before navigating
-    if (menu_stack_top < MENU_STACK_MAX)
-      menu_stack[menu_stack_top++] = current_menu;
-
-    current_menu = new_menu;
-    current_option = new_menu->options;
-    current_option_num = 0;
-  }
-
-  void choose_prev_menu(void)
-  {
-    if (menu_stack_top > 0) {
-      current_menu = menu_stack[--menu_stack_top];
-      current_option = current_menu->options;
-      current_option_num = 0;
-    }
-  }
-
-  void restore_defaults(void)
-  {
-    option_screen_scale        = SCALED_X15_GU;
-    option_screen_mag          = 170;
-    option_screen_filter       = FILTER_BILINEAR;
-    psp_fps_debug              = 0;
-    option_frameskip_type      = FRAMESKIP_AUTO;
-    option_frameskip_value     = 9;
-    option_clock_speed         = PSP_CLOCK_333;
-    option_sound_volume        = 10;
-    option_stack_optimize      = 1;
-    option_boot_mode           = 0;
-    option_update_backup       = 1;
-    option_screen_capture_format = 0;
-    option_enable_analog       = 0;
-    option_analog_sensitivity  = 4;
-    option_language            = 1;
-    option_aspect_ratio        = 0;
-    option_compatibility_mode  = 0;
-    option_color_correction    = COLOR_CORRECTION_OFF;
-    option_brightness          = BRIGHTNESS_DEFAULT;
-    option_contrast            = CONTRAST_DEFAULT;
-    option_saturation          = SATURATION_DEFAULT;
-    option_colortemp           = COLORTEMP_DEFAULT;
-    option_sharpness           = SHARPNESS_DEFAULT;
-    option_button_mapping      = 0;
-    option_resume_on_boot      = 0;
-    option_auto_save_state     = 0;
-
-    extern void rebuild_combined_lut(void);
-    rebuild_combined_lut();
-  }
 
   void reload_cheats_page()
   {
