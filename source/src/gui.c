@@ -961,11 +961,11 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
  
 	  print_string(batt_str, BATT_STATUS_POS_X, 2, color_batt_life, BG_NO_FILL);
 
-	  // Help text reflects current button mapping (X/O or O/X)
+	  // Help text reflects current button mapping
       {
         const char *browser_help = (option_button_mapping == 0)
-          ? "X:Select  O:Menu  Square:Up Dir"
-          : "O:Select  X:Menu  Square:Up Dir";
+          ? "O:Select  X:Menu  Square:Up Dir"
+          : "X:Select  O:Menu  Square:Up Dir";
         print_string(browser_help, 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
       }
 
