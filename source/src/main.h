@@ -60,6 +60,11 @@
 #define SHARPNESS_DEFAULT 0
 #define SHARPNESS_MAX     3
 
+// grid filter (0=off, 1=subtle horizontal, 2=full GBA grid)
+#define GRID_MIN     0
+#define GRID_DEFAULT 0
+#define GRID_MAX     2
+
 // color temperature (0=warm/amber, 4=neutral, 8=cool/blue)
 #define COLORTEMP_MIN     0
 #define COLORTEMP_DEFAULT 4
@@ -118,6 +123,7 @@ extern u32 option_contrast;
 extern u32 option_saturation;
 extern u32 option_colortemp;
 extern u32 option_sharpness;
+extern u32 option_grid;
 extern u32 option_button_mapping;
 extern u32 option_resume_on_boot;
 extern u32 option_auto_save_state;

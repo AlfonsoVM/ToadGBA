@@ -231,6 +231,9 @@
     // MSG_VIDEO_SHARPNESS
     "Sharpness       : %s",
 
+    // MSG_VIDEO_GRID
+    "LCD Grid        : %s",
+
     // MSG_HELP_SUBMENU_VIDEO
     "Display mode, filter, color and image adjustments",
 
@@ -260,6 +263,9 @@
 
     // MSG_HELP_VIDEO_SHARPNESS
     "Left/Right: sharpness (Off/Subtle/Medium/Strong). Compensates bilinear blur",
+
+    // MSG_HELP_VIDEO_GRID
+    "Left/Right: LCD grid (Off / Subtle rows / Full GBA pixel grid)",
 
     // MSG_OPTION_MENU_HELP_0
     "Left/Right:Select   Description:Settings",

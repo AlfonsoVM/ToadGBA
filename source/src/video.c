@@ -36,6 +36,57 @@ static u8 color_luts_initialized = 0;
 #define SHARPNESS_DEFAULT 0
 #define SHARPNESS_MAX     3
 
+// Grid filter — simulates GBA LCD pixel grid
+// 0=off, 1=subtle (horizontal lines only), 2=full grid (GBA-accurate)
+#define GRID_MIN     0
+#define GRID_DEFAULT 0
+#define GRID_MAX     2
+
+// Blend helper: darken a RGB555 pixel by factor/32 (factor=0 -> black, factor=32 -> unchanged)
+#define GRID_DARKEN(px, factor) \
+  ((u16)(((((px) >> 10) & 0x1F) * (factor) / 32) << 10) | \
+         (((((px) >>  5) & 0x1F) * (factor) / 32) <<  5) | \
+         (((((px)       ) & 0x1F) * (factor) / 32)      ) | 0x8000)
+
+// Apply LCD grid filter to screen_texture (240x160) before GPU upload.
+// Works on native resolution — scales naturally with the GPU.
+// Mode 1 (subtle): darkens every other row by ~18% — mimics horizontal scan gaps
+// Mode 2 (full):   darkens row+col borders — closest to real GBA LCD pixel grid
+static void apply_grid_filter(void)
+{
+  extern u32 option_grid;
+  if (option_grid == 0) return;
+
+  for (u32 y = 0; y < GBA_SCREEN_HEIGHT; y++)
+  {
+    u16 *row = screen_texture + y * GBA_LINE_SIZE;
+    u8 dark_row = (y & 1);  // odd rows get the horizontal line
+
+    for (u32 x = 0; x < GBA_SCREEN_WIDTH; x++)
+    {
+      u16 px = row[x];
+
+      if (option_grid == 1)
+      {
+        // Subtle: only horizontal separator lines on odd rows (~18% darker)
+        if (dark_row)
+          row[x] = GRID_DARKEN(px, 26);  // 26/32 = ~81% brightness
+      }
+      else // option_grid == 2 — full GBA grid
+      {
+        // Horizontal line (odd row) + vertical line (odd column)
+        // Corner (both odd): darkest — simulates the cross of the grid
+        u8 dark_col = (x & 1);
+        if (dark_row && dark_col)
+          row[x] = GRID_DARKEN(px, 20);  // ~62% — grid intersection
+        else if (dark_row || dark_col)
+          row[x] = GRID_DARKEN(px, 24);  // ~75% — single grid line
+        // even row + even col = lit pixel area, unchanged
+      }
+    }
+  }
+}
+
 // Forward declaration
 void rebuild_combined_lut(void);
 
@@ -3926,6 +3977,9 @@ static void bitbilt_gu(void)
 {
   // Apply sharpness filter before handing texture to GPU
   apply_sharpness();
+
+  // Apply LCD grid filter (after sharpness so it doesn't get sharpened away)
+  apply_grid_filter();
 
   sceKernelDcacheWritebackAll();
 
