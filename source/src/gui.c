@@ -961,10 +961,10 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
  
 	  print_string(batt_str, BATT_STATUS_POS_X, 2, color_batt_life, BG_NO_FILL);
 
-	  print_string(MSG[MSG_BROWSER_HELP], 30, 246, COLOR_HELP_TEXT, BG_NO_FILL);
+	  print_string(MSG[MSG_BROWSER_HELP], 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
-      // Show mod credit instead of ROM Buffer
-      print_string("ToadGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+      // Show mod credit
+      print_string("ToadGBA", 434, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
       // PSP controller - hold
       if (get_pad_input(PSP_CTRL_HOLD) != 0)
@@ -2319,8 +2319,8 @@ u32 menu(void)
       }
     }
 
-	print_string(MSG[current_option->help_string], 30, 246, COLOR_HELP_TEXT, BG_NO_FILL);
-    print_string("ToadGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+	print_string(MSG[current_option->help_string], 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+    print_string("ToadGBA", 434, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
     // PSP controller - hold
     if (get_pad_input(PSP_CTRL_HOLD) != 0)
