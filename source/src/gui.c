@@ -1413,7 +1413,9 @@ u32 menu(void)
   {
     MSG[MSG_OFF],
     "GPSP",
-    "Retro"
+    "Retro",
+    "AGS-101 (SP)",
+    "LCD oscuro (GBA)"
   };
 
   const char *button_mapping_options[] =
@@ -1457,7 +1459,7 @@ u32 menu(void)
 
   const char *aspect_ratio_options[] =
   {
-    "Core Provided (3:2)", "Zoom (Fill Screen)", "Stretch (Full PSP)"
+    "Core Provided (3:2)", "Zoom (Fill Screen)", "Stretch (Full PSP)", "4:3 Pillarbox"
   };
 
   // Since we can't add messages to the message system, use direct string pointers cast as message indices
@@ -2008,7 +2010,7 @@ u32 menu(void)
 
     NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_1], &option_screen_mag, 201, MSG_OPTION_MENU_HELP_1, 1),
 
-    {NULL, NULL, NULL, "Aspect Ratio: %s", (void*)aspect_ratio_options, &option_aspect_ratio, 3, 0, 2, STRING_SELECTION_OPTION},
+    {NULL, NULL, NULL, "Aspect Ratio: %s", (void*)aspect_ratio_options, &option_aspect_ratio, 4, 0, 2, STRING_SELECTION_OPTION},
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], on_off_options, &option_screen_filter, 2, MSG_OPTION_MENU_HELP_2, 3),
 
@@ -2016,7 +2018,9 @@ u32 menu(void)
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_SHOW_FPS], on_off_options, &psp_fps_debug, 2, MSG_OPTION_MENU_HELP_SHOW_FPS, 6),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_COLOR_CORRECTION], color_correction_options, &option_color_correction, 3, MSG_OPTION_MENU_HELP_COLOR_CORRECTION, 7),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_COLOR_CORRECTION], color_correction_options, &option_color_correction, COLOR_CORRECTION_COUNT, MSG_OPTION_MENU_HELP_COLOR_CORRECTION, 7),
+
+    NUMERIC_SELECTION_OPTION(NULL, "Brillo", &option_brightness, BRIGHTNESS_MAX + 1, MSG_OPTION_MENU_HELP_COLOR_CORRECTION, 8),
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_BUTTON_MAPPING], button_mapping_options, &option_button_mapping, 2, MSG_OPTION_MENU_HELP_BUTTON_MAPPING, 8),
 
@@ -2455,6 +2459,10 @@ u32 menu(void)
   set_sound_volume();
   set_cpu_clock(option_clock_speed);
 
+  // Rebuild combined color+brightness LUT with any new settings
+  extern void rebuild_combined_lut(void);
+  rebuild_combined_lut();
+
   sceDisplayWaitVblankStart();
   video_resolution_small();
 
@@ -2720,6 +2728,7 @@ s32 save_config_file(void)
     file_options[22]  = option_button_mapping;
     file_options[23]  = option_resume_on_boot;
     file_options[24]  = option_auto_save_state;
+    file_options[25]  = option_brightness;
 
     for (i = 0; i < 16; i++)
     {
@@ -2845,16 +2854,17 @@ s32 load_config_file(void)
       option_enable_analog  = file_options[12] % 2;
       option_analog_sensitivity = file_options[13] % 10;
       option_language = file_options[14] % 2;  // Only Japanese (0) and English (1)
-      option_color_correction = file_options[15] % 3;  // 0 = Off, 1 = GPSP, 2 = Retro
+      option_color_correction = file_options[15] % COLOR_CORRECTION_COUNT;
       option_overlay_enabled = file_options[16] % 2;  // 0 = Off, 1 = On
       option_overlay_selected = file_options[17] % 10;  // 0-9 overlay selection
       option_overlay_offset_x = file_options[18] % 241;  // 0-240 X offset
       option_overlay_offset_y = file_options[19] % 113;  // 0-112 Y offset
-      option_aspect_ratio = file_options[20] % 3;  // 0-2 aspect ratio
+      option_aspect_ratio = file_options[20] % 4;  // 0-3 aspect ratio
       option_compatibility_mode = file_options[21] % 2;  // 0 = Fast, 1 = Accurate
       option_button_mapping = file_options[22] % 2;  // 0 = X/O, 1 = O/X
       option_resume_on_boot = file_options[23] % 2;  // 0 = Off, 1 = On
       option_auto_save_state = file_options[24] % 2; // 0 = Off, 1 = On
+      option_brightness = file_options[25] % (BRIGHTNESS_MAX + 1); // 0-8
       
       // Update memory timing when loading config
       set_compatibility_mode(option_compatibility_mode);
@@ -2888,10 +2898,14 @@ s32 load_config_file(void)
   option_enable_analog = 0;
   option_analog_sensitivity = 4;
   option_language = 1;  // Default to English
-  option_color_correction = 0;  // Default to Off
+  option_color_correction = COLOR_CORRECTION_OFF;  // Default to Off
+  option_brightness = BRIGHTNESS_DEFAULT;  // Default to normal (4)
   option_button_mapping = 0;  // Default to X/O mapping
   option_resume_on_boot = 0;  // Default to Off
   option_auto_save_state = 0; // Default to Off
+
+  extern void rebuild_combined_lut(void);
+  rebuild_combined_lut();
 
   return -1;
 }

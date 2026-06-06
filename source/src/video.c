@@ -23,9 +23,15 @@
 #include "volume_icon.c"
 
 // Optimized color correction lookup tables (dynamically allocated)
-static u16 *gpsp_color_lut = NULL;
-static u16 *retro_color_lut = NULL;
+static u16 *gpsp_color_lut   = NULL;
+static u16 *retro_color_lut  = NULL;
+static u16 *agb101_color_lut = NULL;  // GBA SP AGS-101 backlit screen
+static u16 *lcd_dim_lut      = NULL;  // Original GBA unlit LCD
+static u16 *combined_lut     = NULL;  // Merged color+brightness LUT (single scanline pass)
 static u8 color_luts_initialized = 0;
+
+// Forward declaration
+void rebuild_combined_lut(void);
 
 // Global function pointers
 void (*update_screen)(void);
@@ -3473,22 +3479,14 @@ void update_scanline(void)
     }
   }
 
-  // Apply color correction if enabled (optimized with lookup tables)
-  if (option_color_correction == 1) // GPSP mode - fast LUT lookup
+  // Apply color correction + brightness via pre-merged combined LUT (single pass)
+  if (combined_lut)
   {
     for (u32 x = 0; x < 240; x++)
     {
-      screen_offset[x] = gpsp_color_lut[screen_offset[x] & 0x7FFF];
+      screen_offset[x] = combined_lut[screen_offset[x] & 0x7FFF];
     }
   }
-  else if (option_color_correction == 2) // Retro mode - fast LUT lookup
-  {
-    for (u32 x = 0; x < 240; x++)
-    {
-      screen_offset[x] = retro_color_lut[screen_offset[x] & 0x7FFF];
-    }
-  }
-  // option_color_correction == 0 means Off - no processing
 
   affine_reference_x[0] += *((s16 *)io_registers + REG_BG2PB);
   affine_reference_y[0] += *((s16 *)io_registers + REG_BG2PD);
@@ -3502,68 +3500,141 @@ void init_color_correction_luts(void)
   if (color_luts_initialized)
     return;
     
-  // Allocate lookup tables dynamically to save static memory
-  if (!gpsp_color_lut) {
-    gpsp_color_lut = (u16*)safe_malloc(32768 * sizeof(u16));
-  }
-  if (!retro_color_lut) {
-    retro_color_lut = (u16*)safe_malloc(32768 * sizeof(u16));
-  }
+  if (!gpsp_color_lut)   gpsp_color_lut   = (u16*)safe_malloc(32768 * sizeof(u16));
+  if (!retro_color_lut)  retro_color_lut  = (u16*)safe_malloc(32768 * sizeof(u16));
+  if (!agb101_color_lut) agb101_color_lut = (u16*)safe_malloc(32768 * sizeof(u16));
+  if (!lcd_dim_lut)      lcd_dim_lut      = (u16*)safe_malloc(32768 * sizeof(u16));
+  if (!combined_lut)     combined_lut     = (u16*)safe_malloc(32768 * sizeof(u16));
     
   printf("Initializing color correction lookup tables...\n");
   
-  // Build GPSP color correction LUT
+  // --- GPSP color correction ---
   for (int rgb555 = 0; rgb555 < 32768; rgb555++)
   {
-    // Extract RGB555 components
     u32 r = (rgb555 >> 10) & 0x1F;
-    u32 g = (rgb555 >> 5) & 0x1F;
-    u32 b = rgb555 & 0x1F;
+    u32 g = (rgb555 >> 5)  & 0x1F;
+    u32 b =  rgb555        & 0x1F;
     
-    // Convert to 0-255 range for calculations (same as original)
     u32 r8 = (r << 3) | (r >> 2);
     u32 g8 = (g << 3) | (g >> 2);
     u32 b8 = (b << 3) | (b >> 2);
     
-    // Apply GPSP color mixing (same math as original)
     u32 r_new = (205 * r8 + 61 * g8) >> 8;
     u32 g_new = (32 * r8 + 170 * g8 + 54 * b8) >> 8;
     u32 b_new = (50 * r8 + 19 * g8 + 186 * b8) >> 8;
     
-    // Clamp to 255
     r_new = (r_new > 255) ? 255 : r_new;
     g_new = (g_new > 255) ? 255 : g_new;
     b_new = (b_new > 255) ? 255 : b_new;
     
-    // Convert back to 5-bit and store
-    r = r_new >> 3;
-    g = g_new >> 3;
-    b = b_new >> 3;
-    
-    gpsp_color_lut[rgb555] = (r << 10) | (g << 5) | b | 0x8000;
+    gpsp_color_lut[rgb555] = ((r_new >> 3) << 10) | ((g_new >> 3) << 5) | (b_new >> 3) | 0x8000;
   }
   
-  // Build Retro color correction LUT
+  // --- Retro correction (original unlit GBA feel) ---
   for (int rgb555 = 0; rgb555 < 32768; rgb555++)
   {
     u16 r = (rgb555 >> 10) & 0x1F;
-    u16 g = (rgb555 >> 5) & 0x1F;
-    u16 b = rgb555 & 0x1F;
+    u16 g = (rgb555 >> 5)  & 0x1F;
+    u16 b =  rgb555        & 0x1F;
     
-    // Apply retro correction (same as original)
     r = (r * 22) >> 5;
     g = (g * 24) >> 5;
     b = (b * 20) >> 5;
     
-    // Add characteristic GBA greenish tint
     if (g < 28) g += 2;
     if (r < 29) r += 1;
     
     retro_color_lut[rgb555] = (r << 10) | (g << 5) | b | 0x8000;
   }
-  
+
+  // --- AGS-101 (GBA SP backlit screen — vivid, slightly cooler) ---
+  for (int rgb555 = 0; rgb555 < 32768; rgb555++)
+  {
+    u32 r = (rgb555 >> 10) & 0x1F;
+    u32 g = (rgb555 >> 5)  & 0x1F;
+    u32 b =  rgb555        & 0x1F;
+
+    u32 r8 = (r << 3) | (r >> 2);
+    u32 g8 = (g << 3) | (g >> 2);
+    u32 b8 = (b << 3) | (b >> 2);
+
+    // Empirical matrix based on AGS-101 screen measurements
+    u32 r_n = (r8 * 240 + g8 * 16) >> 8;
+    u32 g_n = (g8 * 220 + b8 * 36) >> 8;
+    u32 b_n = (b8 * 230 + r8 * 26) >> 8;
+
+    r_n = (r_n > 255) ? 255 : r_n;
+    g_n = (g_n > 255) ? 255 : g_n;
+    b_n = (b_n > 255) ? 255 : b_n;
+
+    agb101_color_lut[rgb555] = ((r_n >> 3) << 10) | ((g_n >> 3) << 5) | (b_n >> 3) | 0x8000;
+  }
+
+  // --- LCD dim (original GBA without backlight — dark, greenish, low contrast) ---
+  for (int rgb555 = 0; rgb555 < 32768; rgb555++)
+  {
+    u32 r = (rgb555 >> 10) & 0x1F;
+    u32 g = (rgb555 >> 5)  & 0x1F;
+    u32 b =  rgb555        & 0x1F;
+
+    r = (r * 18) >> 5;   // ~56% brightness
+    g = (g * 20) >> 5;   // ~62% brightness, greener
+    b = (b * 14) >> 5;   // ~44% brightness, less blue
+
+    if (g < 30) g = (g * 34) >> 5;  // Characteristic greenish tint
+
+    r = (r > 31) ? 31 : r;
+    g = (g > 31) ? 31 : g;
+    b = (b > 31) ? 31 : b;
+
+    lcd_dim_lut[rgb555] = (r << 10) | (g << 5) | b | 0x8000;
+  }
+
   color_luts_initialized = 1;
-  printf("Color correction LUTs initialized (128KB)\n");
+  printf("Color correction LUTs initialized (320KB)\n");
+
+  // Build initial combined LUT (color off + default brightness)
+  rebuild_combined_lut();
+}
+
+// Rebuild the combined color+brightness LUT — call whenever either option changes.
+// This keeps the per-scanline loop to a single pass.
+void rebuild_combined_lut(void)
+{
+  extern u32 option_color_correction;
+  extern u32 option_brightness;
+
+  if (!combined_lut)
+    combined_lut = (u16*)safe_malloc(32768 * sizeof(u16));
+
+  // Select source color LUT (NULL = identity / no color correction)
+  u16 *src = NULL;
+  switch (option_color_correction) {
+    case COLOR_CORRECTION_GPSP:    src = gpsp_color_lut;   break;
+    case COLOR_CORRECTION_RETRO:   src = retro_color_lut;  break;
+    case COLOR_CORRECTION_AGS101:  src = agb101_color_lut; break;
+    case COLOR_CORRECTION_LCD_DIM: src = lcd_dim_lut;      break;
+    default: src = NULL; break;
+  }
+
+  // Brightness factor in 8.8 fixed point: 4 -> 256 (neutral), 0 -> 128, 8 -> 384
+  u32 factor = 128 + (option_brightness * 32);
+  u8 neutral_brightness = (option_brightness == BRIGHTNESS_DEFAULT);
+
+  for (int i = 0; i < 32768; i++)
+  {
+    // Apply color correction (or identity)
+    u16 c = src ? src[i] : (u16)(i | 0x8000);
+
+    if (neutral_brightness) {
+      combined_lut[i] = c;
+    } else {
+      u32 r = ((c >> 10) & 0x1F) * factor >> 8; if (r > 31) r = 31;
+      u32 g = ((c >>  5) & 0x1F) * factor >> 8; if (g > 31) g = 31;
+      u32 b = ( c        & 0x1F) * factor >> 8; if (b > 31) b = 31;
+      combined_lut[i] = (u16)((r << 10) | (g << 5) | b | 0x8000);
+    }
+  }
 }
 
 void init_video(int devkit_version)
@@ -3739,6 +3810,62 @@ static void bitbilt_gu(void)
   render_overlay();
 }
 
+// 4:3 display list - fits GBA image into PSP screen with correct 4:3 proportions
+// No cropping, no distortion — pillarboxed with black bars on left/right
+static void generate_display_list_4x3(void)
+{
+  u32 i;
+  Vertex *vertices, *vertices_tmp;
+
+  // At PSP height 272, a 4:3 width = 272 * 4/3 = ~362px
+  // Centre horizontally with ~59px margins each side
+  u32 dh = PSP_SCREEN_HEIGHT;             // 272
+  u32 dw = (dh * 4) / 3;                 // 362
+  u32 dx = (PSP_SCREEN_WIDTH - dw) / 2;  // ~59
+  u32 dy = 0;
+
+  sceGuStart(GU_CALL, display_list_0);
+  sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
+
+  vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
+
+  if (vertices != NULL)
+  {
+    memset(vertices, 0, VERTEX_COUNT * sizeof(Vertex));
+    vertices_tmp = vertices;
+
+    for (i = 0; (i + SLICE) < GBA_SCREEN_WIDTH; i += SLICE)
+    {
+      vertices_tmp[0].u = i;
+      vertices_tmp[0].v = 0;
+      vertices_tmp[0].x = dx + ((i * dw) / GBA_SCREEN_WIDTH);
+      vertices_tmp[0].y = dy;
+
+      vertices_tmp[1].u = i + SLICE;
+      vertices_tmp[1].v = GBA_SCREEN_HEIGHT;
+      vertices_tmp[1].x = dx + (((i + SLICE) * dw) / GBA_SCREEN_WIDTH);
+      vertices_tmp[1].y = dy + dh;
+
+      vertices_tmp += 2;
+    }
+
+    vertices_tmp[0].u = i;
+    vertices_tmp[0].v = 0;
+    vertices_tmp[0].x = dx + ((i * dw) / GBA_SCREEN_WIDTH);
+    vertices_tmp[0].y = dy;
+
+    vertices_tmp[1].u = GBA_SCREEN_WIDTH;
+    vertices_tmp[1].v = GBA_SCREEN_HEIGHT;
+    vertices_tmp[1].x = dx + dw;
+    vertices_tmp[1].y = dy + dh;
+
+    sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D,
+                   VERTEX_COUNT, 0, vertices);
+  }
+
+  sceGuFinish();
+}
+
 // Stretch display list - stretches GBA screen to fill entire PSP screen (480x272)
 static void generate_display_list_stretch(void)
 {
@@ -3900,6 +4027,12 @@ void set_gba_resolution(void)
     // Stretch mode: stretch to fill entire PSP screen without cropping
     // This distorts the aspect ratio but shows all content
     generate_display_list_stretch(); // Custom stretch function
+    update_screen = bitbilt_gu;
+    return;
+  }
+  else if (option_aspect_ratio == 3) {
+    // 4:3 mode: pillarboxed, no cropping, no distortion
+    generate_display_list_4x3();
     update_screen = bitbilt_gu;
     return;
   }

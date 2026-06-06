@@ -32,6 +32,19 @@
 #define FILTER_NEAREST  0
 #define FILTER_BILINEAR 1
 
+// color correction modes
+#define COLOR_CORRECTION_OFF      0
+#define COLOR_CORRECTION_GPSP     1
+#define COLOR_CORRECTION_RETRO    2
+#define COLOR_CORRECTION_AGS101   3
+#define COLOR_CORRECTION_LCD_DIM  4
+#define COLOR_CORRECTION_COUNT    5
+
+// brightness adjustment (0=darkest, 4=normal, 8=brightest)
+#define BRIGHTNESS_MIN     0
+#define BRIGHTNESS_DEFAULT 4
+#define BRIGHTNESS_MAX     8
+
 // frameskip type
 #define FRAMESKIP_AUTO   0
 #define FRAMESKIP_MANUAL 1
@@ -80,6 +93,7 @@ extern u32 sleep_flag;
 extern u32 synchronize_flag;
 extern u32 psp_fps_debug;
 extern u32 option_color_correction;
+extern u32 option_brightness;
 extern u32 option_button_mapping;
 extern u32 option_resume_on_boot;
 extern u32 option_auto_save_state;
