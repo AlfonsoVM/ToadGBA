@@ -192,6 +192,9 @@
     // MSG_VIDEO_COLORTEMP
     "Color temp      : %d",
 
+    // MSG_VIDEO_SHARPNESS
+    "Sharpness       : %s",
+
     // MSG_HELP_SUBMENU_VIDEO
     "Display mode, filter, color and image adjustments",
 
@@ -218,6 +221,9 @@
 
     // MSG_HELP_VIDEO_COLORTEMP
     "Left/Right: color temperature (0=warm/amber, 4=neutral, 8=cool/blue)",
+
+    // MSG_HELP_VIDEO_SHARPNESS
+    "Left/Right: sharpness (Off/Subtle/Medium/Strong). Compensates bilinear blur",
 
     // MSG_OPTION_MENU_HELP_0
     "Left/Right:Select   Description:Settings",

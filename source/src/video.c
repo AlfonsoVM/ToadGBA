@@ -30,6 +30,12 @@ static u16 *lcd_dim_lut      = NULL;  // Original GBA unlit LCD
 static u16 *combined_lut     = NULL;  // Merged color+brightness LUT (single scanline pass)
 static u8 color_luts_initialized = 0;
 
+// Sharpness — applied as a full-frame pass in bitbilt_gu before GPU upload
+// 0=off, 1=subtle, 2=medium, 3=strong
+#define SHARPNESS_MIN     0
+#define SHARPNESS_DEFAULT 0
+#define SHARPNESS_MAX     3
+
 // Forward declaration
 void rebuild_combined_lut(void);
 
@@ -3855,8 +3861,72 @@ static void generate_display_list(float mag)
   sceGuFinish();
 }
 
+// Sharpness filter — unsharp mask applied to screen_texture before GPU upload.
+// Works on the native 240x160 GBA buffer. Uses integer arithmetic only.
+// Kernel: center*weight - neighbours*(weight-256) / 256
+// strength levels: 1=subtle(288), 2=medium(384), 3=strong(512)
+static void apply_sharpness(void)
+{
+  extern u32 option_sharpness;
+  if (option_sharpness == 0) return;
+
+  // Weights for center pixel (neighbours weight = center - 256)
+  static const u16 center_w[4] = { 256, 288, 384, 512 };
+  u32 cw = center_w[option_sharpness];  // center weight
+  u32 nw = cw - 256;                    // neighbour weight (subtract)
+
+  // Temporary line buffers — only need prev and current
+  static u16 prev_line[256];
+  static u16 curr_line[256];
+
+  // Copy row 0 as prev
+  memcpy(prev_line, screen_texture, GBA_SCREEN_WIDTH * sizeof(u16));
+
+  for (u32 y = 1; y < GBA_SCREEN_HEIGHT - 1; y++)
+  {
+    u16 *row     = screen_texture + y       * GBA_LINE_SIZE;
+    u16 *row_up  = screen_texture + (y - 1) * GBA_LINE_SIZE;
+    u16 *row_dn  = screen_texture + (y + 1) * GBA_LINE_SIZE;
+
+    memcpy(curr_line, row, GBA_SCREEN_WIDTH * sizeof(u16));
+
+    for (u32 x = 1; x < GBA_SCREEN_WIDTH - 1; x++)
+    {
+      u16 c  = curr_line[x];
+      u16 u  = prev_line[x];       // up
+      u16 d  = row_dn[x];          // down
+      u16 l  = curr_line[x - 1];   // left
+      u16 r  = curr_line[x + 1];   // right
+
+      // Process each channel in RGB555
+      // R = bits 14:10, G = bits 9:5, B = bits 4:0
+      #define SHARP_CH(pix, shift, mask) \
+        ({ s32 v = (s32)(((pix) >> (shift)) & (mask)) * (s32)cw \
+                 - (s32)(((u)  >> (shift)) & (mask)) * (s32)nw \
+                 - (s32)(((d)  >> (shift)) & (mask)) * (s32)nw \
+                 - (s32)(((l)  >> (shift)) & (mask)) * (s32)nw \
+                 - (s32)(((r)  >> (shift)) & (mask)) * (s32)nw; \
+           v >>= 8; \
+           v < 0 ? 0 : v > (s32)(mask) ? (s32)(mask) : v; })
+
+      u32 nr = SHARP_CH(c, 10, 0x1F);
+      u32 ng = SHARP_CH(c,  5, 0x1F);
+      u32 nb = SHARP_CH(c,  0, 0x1F);
+
+      #undef SHARP_CH
+
+      row[x] = (u16)((nr << 10) | (ng << 5) | nb | 0x8000);
+    }
+
+    memcpy(prev_line, curr_line, GBA_SCREEN_WIDTH * sizeof(u16));
+  }
+}
+
 static void bitbilt_gu(void)
 {
+  // Apply sharpness filter before handing texture to GPU
+  apply_sharpness();
+
   sceKernelDcacheWritebackAll();
 
   sceGuStart(GU_DIRECT, display_list);

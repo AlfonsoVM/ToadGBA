@@ -22,7 +22,7 @@
 #include <pspiofilemgr.h>
 
 #define GPSP_CONFIG_FILENAME  "toadgba.cfg"
-#define GPSP_CONFIG_NUM       (29 + 16) // options + game pad config + overlay options + aspect ratio + compatibility mode + button mapping + resume on boot + auto save state + brightness + contrast + saturation + colortemp
+#define GPSP_CONFIG_NUM       (30 + 16) // options + game pad config + overlay + aspect + compat + button mapping + resume + auto save + brightness + contrast + saturation + colortemp + sharpness
 #define GPSP_GAME_CONFIG_NUM  (7 + 16)
 
 #define COLOR_BG            COLOR15( 8, 15, 12)  // Soft mint green background
@@ -2074,7 +2074,9 @@ u32 menu(void)
 
     NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLORTEMP], &option_colortemp, COLORTEMP_MAX + 1, MSG_HELP_VIDEO_COLORTEMP, 9),
 
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 10),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_SHARPNESS], ((const char*[]){"Off","Subtle","Medium","Strong"}), &option_sharpness, SHARPNESS_MAX + 1, MSG_HELP_VIDEO_SHARPNESS, 10),
+
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 11),
   };
 
   MAKE_MENU(video, NULL, NULL);
@@ -2863,6 +2865,7 @@ s32 save_config_file(void)
     file_options[26]  = option_contrast;
     file_options[27]  = option_saturation;
     file_options[28]  = option_colortemp;
+    file_options[29]  = option_sharpness;
 
     for (i = 0; i < 16; i++)
     {
@@ -3002,6 +3005,7 @@ s32 load_config_file(void)
       option_contrast   = file_options[26] % (CONTRAST_MAX   + 1);
       option_saturation = file_options[27] % (SATURATION_MAX + 1);
       option_colortemp  = file_options[28] % (COLORTEMP_MAX  + 1);
+      option_sharpness  = file_options[29] % (SHARPNESS_MAX  + 1);
       
       // Update memory timing when loading config
       set_compatibility_mode(option_compatibility_mode);
@@ -3040,6 +3044,7 @@ s32 load_config_file(void)
   option_contrast   = CONTRAST_DEFAULT;
   option_saturation = SATURATION_DEFAULT;
   option_colortemp  = COLORTEMP_DEFAULT;
+  option_sharpness  = SHARPNESS_DEFAULT;
   option_button_mapping = 0;  // Default to X/O mapping
   option_resume_on_boot = 0;  // Default to Off
   option_auto_save_state = 0; // Default to Off
