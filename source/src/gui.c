@@ -1396,13 +1396,13 @@ u32 menu(void)
 
   static char cheat_format_str[MAX_CHEATS][25*4];// gpsp kai 41*4 - moved to static to prevent stack overflow
 
-  MenuType *current_menu;
-  MenuOptionType *current_option;
+  static MenuType *current_menu;
+  static MenuOptionType *current_option;
   MenuOptionType *display_option;
 
   u32 menu_init_flag = 0;
 
-  u32 current_option_num = 0;
+  static u32 current_option_num = 0;
   u32 menu_main_option_num = 0;
 
 
@@ -2372,8 +2372,9 @@ u32 menu(void)
 
   // Menu navigation stack (max depth 8)
   #define MENU_STACK_MAX 8
-  MenuType *menu_stack[MENU_STACK_MAX];
-  int menu_stack_top = 0;
+  static MenuType *menu_stack[MENU_STACK_MAX];
+  static int menu_stack_top = 0;
+  menu_stack_top = 0;  // reset on each entry to menu()
 
   void choose_menu(MenuType *new_menu)
   {
