@@ -2489,8 +2489,7 @@ u32 menu(void)
         }
         else
         {
-          menu_init();
-          choose_menu(&main_menu);
+          choose_prev_menu();
         }
         break;
 
@@ -2548,7 +2547,6 @@ u32 menu(void)
         break;
 
       case CURSOR_BACK:
-        choose_prev_menu();
         break;
       case CURSOR_NONE:
         break;
