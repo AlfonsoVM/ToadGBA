@@ -461,7 +461,14 @@ u32 update_input(void)
 
       if (button_id < BUTTON_ID_MENU)
       {
-        new_key |= button_id_to_gba_mask[button_id];
+        // Apply button mapping: in O/X mode (mapping==1), swap A and B
+        // so the physical layout matches what the menu uses
+        u32 mapped_id = button_id;
+        if (option_button_mapping == 1) {
+          if (button_id == BUTTON_ID_A) mapped_id = BUTTON_ID_B;
+          else if (button_id == BUTTON_ID_B) mapped_id = BUTTON_ID_A;
+        }
+        new_key |= button_id_to_gba_mask[mapped_id];
       }
       else
       {

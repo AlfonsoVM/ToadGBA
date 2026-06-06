@@ -961,7 +961,7 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
  
 	  print_string(batt_str, BATT_STATUS_POS_X, 2, color_batt_life, BG_NO_FILL);
 
-	  print_string(MSG[MSG_BROWSER_HELP], 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+	  print_string(MSG[MSG_BROWSER_HELP], 30, 246, COLOR_HELP_TEXT, BG_NO_FILL);
 
       // Show mod credit instead of ROM Buffer
       print_string("ToadGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
@@ -1163,13 +1163,36 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
               
               // Check if it's a recent game (starts with "> ")
               if (strncmp(selected_file, "> ", 2) == 0) {
-                // Get the actual game index (minus the header and star prefix)
-                int recent_index = selection[FILE_LIST] - 1; // Subtract the "Recent Games" header
+                // Find the "--- Recent Games ---" separator scanning backwards
+                // to get correct index regardless of how many dirs are listed above
+                int sep_index = selection[FILE_LIST] - 1;
+                while (sep_index >= 0 &&
+                       strncmp(file_list[sep_index], "---", 3) != 0)
+                  sep_index--;
+                int recent_index = selection[FILE_LIST] - sep_index - 1;
                 if (recent_index >= 0 && recent_index < num_recent_games) {
-                  // Use the full path from recent_games array
-                  strcpy(result, recent_games[recent_index]);
-                  repeat = 0;
-                  return_value = 0;
+                  char *path = recent_games[recent_index];
+                  // Strip trailing \r or \n from Windows-formatted files
+                  int plen = strlen(path);
+                  while (plen > 0 && (path[plen-1] == '\r' || path[plen-1] == '\n'))
+                    path[--plen] = '\0';
+                  // Verify file exists before loading
+                  SceUID test = sceIoOpen(path, PSP_O_RDONLY, 0777);
+                  if (test >= 0) {
+                    sceIoClose(test);
+                    strcpy(result, path);
+                    repeat = 0;
+                    return_value = 0;
+                  } else {
+                    // File not found — silently remove from recent list
+                    int j;
+                    for (j = recent_index; j < num_recent_games - 1; j++)
+                      strcpy(recent_games[j], recent_games[j+1]);
+                    recent_games[--num_recent_games][0] = '\0';
+                    save_recent_games();
+                    repeat = 1;
+                    break;
+                  }
                 }
               } else {
                 // Normal file selection
@@ -1287,7 +1310,23 @@ void action_savestate(void)
   char savestate_filename[MAX_FILE];
   u16 *current_screen;
 
+  // Guard: ensure save directory is accessible before attempting save
+  // A missing or unwritable dir_state is a common cause of blue screen crashes
+  extern char dir_state[];
+  if (dir_state[0] != '\0') {
+    SceUID test_dir = sceIoDopen(dir_state);
+    if (test_dir < 0) {
+      // Try to create it; if that also fails, bail out gracefully
+      if (sceIoMkdir(dir_state, 0777) < 0) {
+        return;  // Can't save — silent fail is better than a crash
+      }
+    } else {
+      sceIoDclose(test_dir);
+    }
+  }
+
   current_screen = copy_screen();
+  if (!current_screen) return;  // Allocation failure — avoid NULL dereference crash
 
   // Free overlay memory to ensure enough RAM for save operation
   pause_overlay_for_saveload();
@@ -2280,7 +2319,7 @@ u32 menu(void)
       }
     }
 
-	print_string(MSG[current_option->help_string], 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+	print_string(MSG[current_option->help_string], 30, 246, COLOR_HELP_TEXT, BG_NO_FILL);
     print_string("ToadGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
     // PSP controller - hold
