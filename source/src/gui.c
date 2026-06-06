@@ -1460,7 +1460,7 @@ u32 menu(void)
     "GPSP",
     "Retro",
     "AGS-101 (SP)",
-    "LCD oscuro (GBA)"
+    "LCD dim (GBA)"
   };
 
   const char *button_mapping_options[] =
