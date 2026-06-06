@@ -1622,6 +1622,18 @@ u32 menu(void)
     quit();
   }
 
+  void menu_reset(void)
+  {
+    if (!first_load)
+    {
+      reset_gba();
+      reg[CHANGED_PC_STATUS] = 1;
+
+      return_value = 1;
+      repeat = 0;
+    }
+  }
+
   void menu_suspend(void)
   {
     save_game_config_file();
