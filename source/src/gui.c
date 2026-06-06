@@ -1297,6 +1297,83 @@ static void get_savestate_filename(u32 slot, char *name_buffer)
 }
 
 
+// Forward declarations for menu navigation (defined below, used as function pointers)
+static void global_choose_prev_menu(void);
+static void global_restore_defaults(void);
+static void global_browse_dir_roms(void);
+static void global_browse_dir_save(void);
+static void global_browse_dir_state(void);
+static void global_browse_dir_cheat(void);
+static void global_browse_dir_snap(void);
+
+// Global menu stack — shared between menu() and navigation helpers
+#define MENU_STACK_MAX 8
+static MenuType *g_menu_stack[MENU_STACK_MAX];
+static int g_menu_stack_top = 0;
+static MenuType *g_current_menu = NULL;
+static MenuOptionType *g_current_option = NULL;
+static u32 g_current_option_num = 0;
+
+static void global_choose_prev_menu(void)
+{
+  if (g_menu_stack_top > 0) {
+    g_current_menu = g_menu_stack[--g_menu_stack_top];
+    if (g_current_menu) {
+      g_current_option = g_current_menu->options;
+      g_current_option_num = 0;
+    }
+  }
+}
+
+static void global_restore_defaults(void)
+{
+  option_screen_scale        = SCALED_X15_GU;
+  option_screen_mag          = 170;
+  option_screen_filter       = FILTER_BILINEAR;
+  psp_fps_debug              = 0;
+  option_frameskip_type      = FRAMESKIP_AUTO;
+  option_frameskip_value     = 9;
+  option_clock_speed         = PSP_CLOCK_333;
+  option_sound_volume        = 10;
+  option_stack_optimize      = 1;
+  option_boot_mode           = 0;
+  option_update_backup       = 1;
+  option_screen_capture_format = 0;
+  option_enable_analog       = 0;
+  option_analog_sensitivity  = 4;
+  option_language            = 1;
+  option_aspect_ratio        = 0;
+  option_compatibility_mode  = 0;
+  option_color_correction    = COLOR_CORRECTION_OFF;
+  option_brightness          = BRIGHTNESS_DEFAULT;
+  option_contrast            = CONTRAST_DEFAULT;
+  option_saturation          = SATURATION_DEFAULT;
+  option_colortemp           = COLORTEMP_DEFAULT;
+  option_sharpness           = SHARPNESS_DEFAULT;
+  option_grid                = GRID_DEFAULT;
+  option_button_mapping      = 0;
+  option_resume_on_boot      = 0;
+  option_auto_save_state     = 0;
+
+  extern void rebuild_combined_lut(void);
+  rebuild_combined_lut();
+
+  // Also navigate back to main menu
+  global_choose_prev_menu();
+}
+
+// Browse helpers — called from Directories submenu
+// These set a flag; the actual browse happens in menu() loop
+static char *g_browse_target_dir = NULL;
+static const char *g_browse_ini_key = NULL;
+static u8 g_browse_pending = 0;
+
+static void global_browse_dir_roms(void)  { g_browse_target_dir = dir_roms;  g_browse_ini_key = "rom_directory";          g_browse_pending = 1; }
+static void global_browse_dir_save(void)  { g_browse_target_dir = dir_save;  g_browse_ini_key = "save_directory";         g_browse_pending = 1; }
+static void global_browse_dir_state(void) { g_browse_target_dir = dir_state; g_browse_ini_key = "save_state_directory";   g_browse_pending = 1; }
+static void global_browse_dir_cheat(void) { g_browse_target_dir = dir_cheat; g_browse_ini_key = "cheat_directory";        g_browse_pending = 1; }
+static void global_browse_dir_snap(void)  { g_browse_target_dir = dir_snap;  g_browse_ini_key = "snapshot_directory";     g_browse_pending = 1; }
+
 void action_loadstate(void)
 {
   char savestate_filename[MAX_FILE];
@@ -1545,8 +1622,7 @@ u32 menu(void)
   };
 
   auto void choose_menu(MenuType *new_menu);
-  auto void choose_prev_menu(void);
-  auto void restore_defaults(void);
+  auto void menu_init(void);
 
   auto void menu_init(void);
   auto void menu_term(void);
@@ -1568,11 +1644,6 @@ u32 menu(void)
   auto void submenu_cheats_misc(void);
 
   auto void menu_load_file(void);
-  auto void browse_dir_roms(void);
-  auto void browse_dir_save(void);
-  auto void browse_dir_state(void);
-  auto void browse_dir_cheat(void);
-  auto void browse_dir_snap(void);
 
   auto void submenu_emulator(void);
   auto void submenu_gamepad(void);
@@ -1705,75 +1776,6 @@ u32 menu(void)
   }
 
   // Helper: let user browse to a directory and update dir_var + dir.ini
-  void browse_for_dir(char *dir_var, const char *ini_key)
-  {
-    // Use load_file with no wildcards — user navigates dirs and confirms with O/X
-    const char *no_ext[] = { NULL };
-    char selected[MAX_PATH];
-
-    // Start browser in the current value of dir_var
-    char start_dir[MAX_PATH];
-    strcpy(start_dir, dir_var);
-
-    // load_file returns the selected file; we want the directory instead.
-    // We repurpose it: if user presses confirm on a dir entry ".." or navigates
-    // and presses Select (CURSOR_DEFAULT) we capture getcwd.
-    // Simplest approach: use load_file, ignore file result, use its final cwd.
-    char dummy[MAX_PATH];
-    dummy[0] = '\0';
-    load_file(no_ext, dummy, start_dir);
-
-    // After load_file returns, getcwd gives us where the user ended up
-    char new_dir[MAX_PATH];
-    if (getcwd(new_dir, MAX_PATH) != NULL) {
-      // Ensure trailing slash
-      if (new_dir[strlen(new_dir) - 1] != '/')
-        strcat(new_dir, "/");
-      strcpy(dir_var, new_dir);
-
-      // Persist to dir.ini
-      char ini_path[MAX_PATH];
-      sprintf(ini_path, "%sdir.ini", main_path);
-      // Read existing, rewrite with updated key
-      char lines[16][256];
-      int nlines = 0;
-      FILE *f = fopen(ini_path, "r");
-      if (f) {
-        while (nlines < 15 && fgets(lines[nlines], 256, f))
-          nlines++;
-        fclose(f);
-      }
-      // Find and update the matching key
-      u8 found = 0;
-      for (int k = 0; k < nlines; k++) {
-        char var[128], val[128];
-        if (parse_config_line(lines[k], var, val) != -1 &&
-            strcasecmp(var, ini_key) == 0) {
-          sprintf(lines[k], "%s = %s\n", ini_key, new_dir);
-          found = 1;
-          break;
-        }
-      }
-      if (!found && nlines < 15)
-        sprintf(lines[nlines++], "%s = %s\n", ini_key, new_dir);
-
-      f = fopen(ini_path, "w");
-      if (f) {
-        for (int k = 0; k < nlines; k++)
-          fputs(lines[k], f);
-        fclose(f);
-      }
-    }
-
-    menu_init();
-    choose_menu(current_menu);
-  }
-
-  void browse_dir_roms(void)  { browse_for_dir(dir_roms,  "rom_directory"); }
-  void browse_dir_save(void)  { browse_for_dir(dir_save,  "save_directory"); }
-  void browse_dir_state(void) { browse_for_dir(dir_state, "save_state_directory"); }
-  void browse_dir_cheat(void) { browse_for_dir(dir_cheat, "cheat_directory"); }
-  void browse_dir_snap(void)  { browse_for_dir(dir_snap,  "snapshot_directory"); }
   {
     if (!first_load)
     {
@@ -2165,7 +2167,7 @@ u32 menu(void)
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_GRID], ((const char*[]){"Off","Subtle","Full GBA"}), &option_grid, GRID_MAX + 1, MSG_HELP_VIDEO_GRID, 11),
 
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 12),
+    ACTION_OPTION(global_choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 12),
   };
 
   MAKE_MENU(video, NULL, NULL);
@@ -2183,7 +2185,7 @@ u32 menu(void)
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_7], stack_optimize_options, &option_stack_optimize, 2, MSG_OPTION_MENU_HELP_7, 4),
 
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
+    ACTION_OPTION(global_choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
   };
 
   MAKE_MENU(performance, NULL, NULL);
@@ -2193,7 +2195,7 @@ u32 menu(void)
   {
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_6], sound_volume_options, &option_sound_volume, 11, MSG_OPTION_MENU_HELP_6, 0),
 
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
+    ACTION_OPTION(global_choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
   };
 
   MAKE_MENU(audio, NULL, NULL);
@@ -2203,7 +2205,7 @@ u32 menu(void)
   {
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_BUTTON_MAPPING], button_mapping_options, &option_button_mapping, 2, MSG_OPTION_MENU_HELP_BUTTON_MAPPING, 0),
 
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
+    ACTION_OPTION(global_choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
   };
 
   MAKE_MENU(controls, NULL, NULL);
@@ -2211,12 +2213,12 @@ u32 menu(void)
   // ── DIRECTORIES SUBMENU ─────────────────────────────────────────────────
   MenuOptionType directories_options[] =
   {
-    ACTION_OPTION(browse_dir_roms,  NULL, MSG[MSG_DIR_ROMS],  MSG_HELP_DIR_ROMS,  0),
-    ACTION_OPTION(browse_dir_save,  NULL, MSG[MSG_DIR_SAVE],  MSG_HELP_DIR_SAVE,  1),
-    ACTION_OPTION(browse_dir_state, NULL, MSG[MSG_DIR_STATE], MSG_HELP_DIR_STATE, 2),
-    ACTION_OPTION(browse_dir_cheat, NULL, MSG[MSG_DIR_CHEAT], MSG_HELP_DIR_CHEAT, 3),
-    ACTION_OPTION(browse_dir_snap,  NULL, MSG[MSG_DIR_SNAP],  MSG_HELP_DIR_SNAP,  4),
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
+    ACTION_OPTION(global_browse_dir_roms,  NULL, MSG[MSG_DIR_ROMS],  MSG_HELP_DIR_ROMS,  0),
+    ACTION_OPTION(global_browse_dir_save,  NULL, MSG[MSG_DIR_SAVE],  MSG_HELP_DIR_SAVE,  1),
+    ACTION_OPTION(global_browse_dir_state, NULL, MSG[MSG_DIR_STATE], MSG_HELP_DIR_STATE, 2),
+    ACTION_OPTION(global_browse_dir_cheat, NULL, MSG[MSG_DIR_CHEAT], MSG_HELP_DIR_CHEAT, 3),
+    ACTION_OPTION(global_browse_dir_snap,  NULL, MSG[MSG_DIR_SNAP],  MSG_HELP_DIR_SNAP,  4),
+    ACTION_OPTION(global_choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
   };
 
   MAKE_MENU(directories, NULL, NULL);
@@ -2232,7 +2234,7 @@ u32 menu(void)
 
     SUBMENU_OPTION(&directories_menu, MSG[MSG_SUBMENU_DIRECTORIES], MSG_HELP_SUBMENU_DIRECTORIES, 3),
 
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 4),
+    ACTION_OPTION(global_choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 4),
   };
 
   MAKE_MENU(system, NULL, NULL);
@@ -2250,7 +2252,7 @@ u32 menu(void)
 
     SUBMENU_OPTION(&system_menu, MSG[MSG_SUBMENU_SYSTEM], MSG_HELP_SUBMENU_SYSTEM, 4),
 
-    ACTION_OPTION(restore_defaults, NULL, MSG[MSG_OPTION_MENU_DEFAULT], MSG_OPTION_MENU_HELP_DEFAULT, 5),
+    ACTION_OPTION(global_restore_defaults, NULL, MSG[MSG_OPTION_MENU_DEFAULT], MSG_OPTION_MENU_HELP_DEFAULT, 5),
 
     ACTION_SUBMENU_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 6)
   };
@@ -2381,55 +2383,15 @@ u32 menu(void)
     if (new_menu == NULL)
       new_menu = &main_menu;
 
-    // Push current menu onto stack before navigating
-    if (menu_stack_top < MENU_STACK_MAX)
-      menu_stack[menu_stack_top++] = current_menu;
+    if (g_menu_stack_top < MENU_STACK_MAX)
+      g_menu_stack[g_menu_stack_top++] = current_menu;
 
     current_menu = new_menu;
+    g_current_menu = new_menu;
     current_option = new_menu->options;
+    g_current_option = new_menu->options;
     current_option_num = 0;
-  }
-
-  void choose_prev_menu(void)
-  {
-    if (menu_stack_top > 0) {
-      current_menu = menu_stack[--menu_stack_top];
-      current_option = current_menu->options;
-      current_option_num = 0;
-    }
-  }
-
-  void restore_defaults(void)
-  {
-    option_screen_scale        = SCALED_X15_GU;
-    option_screen_mag          = 170;
-    option_screen_filter       = FILTER_BILINEAR;
-    psp_fps_debug              = 0;
-    option_frameskip_type      = FRAMESKIP_AUTO;
-    option_frameskip_value     = 9;
-    option_clock_speed         = PSP_CLOCK_333;
-    option_sound_volume        = 10;
-    option_stack_optimize      = 1;
-    option_boot_mode           = 0;
-    option_update_backup       = 1;
-    option_screen_capture_format = 0;
-    option_enable_analog       = 0;
-    option_analog_sensitivity  = 4;
-    option_language            = 1;
-    option_aspect_ratio        = 0;
-    option_compatibility_mode  = 0;
-    option_color_correction    = COLOR_CORRECTION_OFF;
-    option_brightness          = BRIGHTNESS_DEFAULT;
-    option_contrast            = CONTRAST_DEFAULT;
-    option_saturation          = SATURATION_DEFAULT;
-    option_colortemp           = COLORTEMP_DEFAULT;
-    option_sharpness           = SHARPNESS_DEFAULT;
-    option_button_mapping      = 0;
-    option_resume_on_boot      = 0;
-    option_auto_save_state     = 0;
-
-    extern void rebuild_combined_lut(void);
-    rebuild_combined_lut();
+    g_current_option_num = 0;
   }
 
   void reload_cheats_page()
@@ -2641,7 +2603,12 @@ u32 menu(void)
         }
         else
         {
-          choose_prev_menu();
+          global_choose_prev_menu();
+          if (g_current_menu) {
+            current_menu   = g_current_menu;
+            current_option = g_current_option;
+            current_option_num = g_current_option_num;
+          }
         }
         break;
 
