@@ -925,23 +925,8 @@ int user_main(int argc, char *argv[])
   }
   else
   {
-    if (load_file(file_ext, load_filename, dir_roms) < 0)
-    {
-      menu();
-    }
-    else
-    {
-      // Construct full path when loading from file browser
-      char full_game_path[MAX_PATH];
-      sprintf(full_game_path, "%s%s", dir_roms, load_filename);
-      
-      if (load_gamepak(full_game_path) < 0)
-      {
-        clear_screen(COLOR32_BLACK);
-        error_msg(MSG[MSG_ERR_LOAD_GAMEPACK], CONFIRMATION_CONT);
-        menu();
-      }
-    }
+    // Go to menu first — let the user choose from there
+    menu();
   }
 
   reset_gba();
