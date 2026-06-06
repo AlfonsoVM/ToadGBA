@@ -2319,6 +2319,16 @@ u32 menu(void)
   // Overlay menu is now initialized globally to avoid scope issues
   // The overlay_options_global and overlay_menu_global are used directly from main menu
 
+  // Must be defined BEFORE cheats_misc_options[] which uses it as a function pointer
+  void reload_cheats_page()
+  {
+    for(i = 0; i<10; i++)
+    {
+      cheats_misc_options[i].display_string = cheat_format_str[(10 * menu_cheat_page) + i];
+      cheats_misc_options[i].current_option = &(cheats[(10 * menu_cheat_page) + i].cheat_active);
+    }
+  }
+
   MenuOptionType cheats_misc_options[] =
   {
     CHEAT_OPTION((10 * menu_cheat_page) + 0),
@@ -2428,15 +2438,6 @@ u32 menu(void)
 
 
   MAKE_MENU(main, NULL, NULL);
-
-  void reload_cheats_page()
-  {
-    for(i = 0; i<10; i++)
-    {
-      cheats_misc_options[i].display_string = cheat_format_str[(10 * menu_cheat_page) + i];
-      cheats_misc_options[i].current_option = &(cheats[(10 * menu_cheat_page) + i].cheat_active);
-    }
-  }
 
 
   sound_pause = 1;
