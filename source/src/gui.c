@@ -2309,6 +2309,7 @@ u32 menu(void)
   // The overlay_options_global and overlay_menu_global are used directly from main menu
 
   // Must be defined BEFORE cheats_misc_options[] which uses it as a function pointer
+  // reload_cheats_page uses cheats_misc_options — must be AFTER the array
   void reload_cheats_page()
   {
     for(i = 0; i<10; i++)
@@ -2318,7 +2319,7 @@ u32 menu(void)
     }
   }
 
-  MenuOptionType cheats_misc_options[] =
+  static MenuOptionType cheats_misc_options[] =
   {
     CHEAT_OPTION((10 * menu_cheat_page) + 0),
     CHEAT_OPTION((10 * menu_cheat_page) + 1),
