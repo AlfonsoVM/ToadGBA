@@ -859,6 +859,12 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
     scePowerLock(0);
     current_dir = sceIoDopen(current_dir_name);
 
+    if (!FILE_CHECK_VALID(current_dir)) {
+      scePowerUnlock(0);
+      return_value = -1;
+      break;
+    }
+
     while (sceIoDread(current_dir, &current_file) > 0)
     {
       if (current_file.d_name[0] == '.')
@@ -1347,6 +1353,45 @@ void action_savestate(void)
 }
 
 
+// Save a single key=value line to dir.ini, updating if already present.
+// Non-nested static function — safe to call from nested functions on PSP/MIPS.
+static void save_dir_ini_entry(const char *ini_key, const char *new_dir)
+{
+  char ini_path[MAX_PATH];
+  sprintf(ini_path, "%sdir.ini", main_path);
+
+  // Read existing lines (max 16)
+  char lines[16][256];
+  int nlines = 0;
+  FILE *f = fopen(ini_path, "r");
+  if (f) {
+    while (nlines < 15 && fgets(lines[nlines], 256, f))
+      nlines++;
+    fclose(f);
+  }
+
+  // Update matching key or append
+  u8 found = 0;
+  char var[128], val[128];
+  for (int k = 0; k < nlines; k++) {
+    if (parse_config_line(lines[k], var, val) != -1 &&
+        strcasecmp(var, ini_key) == 0) {
+      snprintf(lines[k], 256, "%s = %s\n", ini_key, new_dir);
+      found = 1;
+      break;
+    }
+  }
+  if (!found && nlines < 15)
+    snprintf(lines[nlines++], 256, "%s = %s\n", ini_key, new_dir);
+
+  f = fopen(ini_path, "w");
+  if (f) {
+    for (int k = 0; k < nlines; k++)
+      fputs(lines[k], f);
+    fclose(f);
+  }
+}
+
 u32 menu(void)
 {
   // Auto-save state before entering menu (only if auto save/load is enabled)
@@ -1711,69 +1756,34 @@ u32 menu(void)
     }
   }
 
-  // Helper: let user browse to a directory and update dir_var + dir.ini
+  // Helper: let user browse to a directory and update dir_var + dir.ini.
+  // Intentionally minimal — no calls to other nested functions (menu_init,
+  // choose_menu) to avoid nested-trampoline chains that crash PSP/MIPS.
+  // Navigate with D-pad, enter dirs with O/X, exit with Triangle to confirm.
   void browse_for_dir(char *dir_var, const char *ini_key)
   {
-    // Use load_file with no wildcards — user navigates dirs and confirms with O/X
     const char *no_ext[] = { NULL };
-    char selected[MAX_PATH];
-
-    // Start browser in the current value of dir_var
-    char start_dir[MAX_PATH];
-    strcpy(start_dir, dir_var);
-
-    // load_file returns the selected file; we want the directory instead.
-    // We repurpose it: if user presses confirm on a dir entry ".." or navigates
-    // and presses Select (CURSOR_DEFAULT) we capture getcwd.
-    // Simplest approach: use load_file, ignore file result, use its final cwd.
     char dummy[MAX_PATH];
     dummy[0] = '\0';
-    load_file(no_ext, dummy, start_dir);
 
-    // After load_file returns, getcwd gives us where the user ended up
+    // Pass dir_var directly as the starting directory.
+    // load_file will chdir into it; we read the final cwd afterwards.
+    load_file(no_ext, dummy, dir_var);
+
+    // Save wherever the user ended up (even if they pressed EXIT/cancel —
+    // they navigated there intentionally, so we treat it as the selection).
     char new_dir[MAX_PATH];
     if (getcwd(new_dir, MAX_PATH) != NULL) {
-      // Ensure trailing slash
-      if (new_dir[strlen(new_dir) - 1] != '/')
-        strcat(new_dir, "/");
+      u32 len = strlen(new_dir);
+      if (len > 0 && new_dir[len - 1] != '/') {
+        new_dir[len]     = '/';
+        new_dir[len + 1] = '\0';
+      }
       strcpy(dir_var, new_dir);
-
-      // Persist to dir.ini
-      char ini_path[MAX_PATH];
-      sprintf(ini_path, "%sdir.ini", main_path);
-      // Read existing, rewrite with updated key
-      char lines[16][256];
-      int nlines = 0;
-      FILE *f = fopen(ini_path, "r");
-      if (f) {
-        while (nlines < 15 && fgets(lines[nlines], 256, f))
-          nlines++;
-        fclose(f);
-      }
-      // Find and update the matching key
-      u8 found = 0;
-      for (int k = 0; k < nlines; k++) {
-        char var[128], val[128];
-        if (parse_config_line(lines[k], var, val) != -1 &&
-            strcasecmp(var, ini_key) == 0) {
-          sprintf(lines[k], "%s = %s\n", ini_key, new_dir);
-          found = 1;
-          break;
-        }
-      }
-      if (!found && nlines < 15)
-        sprintf(lines[nlines++], "%s = %s\n", ini_key, new_dir);
-
-      f = fopen(ini_path, "w");
-      if (f) {
-        for (int k = 0; k < nlines; k++)
-          fputs(lines[k], f);
-        fclose(f);
-      }
+      save_dir_ini_entry(ini_key, new_dir);  // non-nested static helper
     }
-
-    menu_init();
-    choose_menu(current_menu);
+    // Return to the menu loop — no choose_menu needed; the loop continues
+    // with current_menu still set to the directories submenu.
   }
 
   void browse_dir_roms(void)  { browse_for_dir(dir_roms,  "rom_directory"); }
