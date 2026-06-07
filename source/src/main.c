@@ -934,18 +934,10 @@ int user_main(int argc, char *argv[])
     }
     else
     {
-      // load_file() leaves cwd pointing at the directory containing the selected file,
-      // and returns either a bare filename (normal selection) or a full path (recent game).
-      // Mirror exactly what menu_load_file() does: pass the result directly to load_gamepak.
-      // For recent games (full path already in load_filename) prepending dir_roms would
-      // produce an invalid double-prefixed path and always fail.
-      char full_game_path[MAX_PATH];
-      if (load_filename[0] == '/' || strstr(load_filename, ":/"))
-        strcpy(full_game_path, load_filename);           // already absolute (recent game)
-      else
-        sprintf(full_game_path, "%s%s", dir_roms, load_filename); // bare filename → prefix
-
-      if (load_gamepak(full_game_path) < 0)
+      // load_file() sets cwd to the directory containing the selected file and writes
+      // either a bare filename (normal pick) or a full path (recent game) into load_filename.
+      // Pass it straight to load_gamepak — same as menu_load_file() does.
+      if (load_gamepak(load_filename) < 0)
       {
         clear_screen(COLOR32_BLACK);
         error_msg(MSG[MSG_ERR_LOAD_GAMEPACK], CONFIRMATION_CONT);
