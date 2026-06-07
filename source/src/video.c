@@ -30,6 +30,7 @@ static u16 *lcd_dim_lut      = NULL;  // Original GBA unlit LCD
 static u16 *combined_lut     = NULL;  // Merged color+brightness LUT (single scanline pass)
 static u8 color_luts_initialized = 0;
 static u8 lut_is_identity    = 0;     // 1 when combined_lut is identity (all settings neutral)
+static u8 gpu_tex_is_2x      = 0;     // 1 when GPU texture is pointing at scale2x_buffer
 
 // Sharpness — applied as a full-frame pass in bitbilt_gu before GPU upload
 // 0=off, 1=subtle, 2=medium, 3=strong
@@ -4266,8 +4267,12 @@ static void bitbilt_gu(void)
     sceKernelDcacheWritebackRange(scale2x_buffer, SCALE2X_H * SCALE2X_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
-    sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
-    sceGuTexFlush();
+    // Only re-point GPU texture at scale2x_buffer if it was previously on screen_texture.
+    if (!gpu_tex_is_2x) {
+      sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
+      gpu_tex_is_2x = 1;
+    }
+    sceGuTexFlush();  // invalidate GPU texture cache so it re-reads updated buffer
     sceGuCallList(display_list_s2x);
     sceGuFinish();
     sceGuSync(0, GU_SYNC_FINISH);
@@ -4280,10 +4285,13 @@ static void bitbilt_gu(void)
     // Flush only the screen_texture rows we rendered — not the entire D-cache.
     sceKernelDcacheWritebackRange(screen_texture, GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
 
-    // Set texture explicitly each frame so switching from 2x mode works correctly.
     sceGuStart(GU_DIRECT, display_list);
-    sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
-    sceGuTexFlush();
+    // Only re-point GPU texture at screen_texture if it was previously on scale2x_buffer.
+    if (gpu_tex_is_2x) {
+      sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
+      gpu_tex_is_2x = 0;
+    }
+    sceGuTexFlush();  // invalidate GPU texture cache so it re-reads updated screen_texture
     sceGuCallList(display_list_0);
     sceGuFinish();
     sceGuSync(0, GU_SYNC_FINISH);

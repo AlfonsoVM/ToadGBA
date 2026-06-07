@@ -1307,6 +1307,9 @@ void action_loadstate(void)
 {
   char savestate_filename[MAX_FILE];
 
+  // No game loaded — nothing to load into
+  if (gamepak_filename[0] == '\0') return;
+
   // Free overlay memory to ensure enough RAM for load operation
   pause_overlay_for_saveload();
   
@@ -1321,6 +1324,9 @@ void action_savestate(void)
 {
   char savestate_filename[MAX_FILE];
   u16 *current_screen;
+
+  // No game loaded — nothing to save
+  if (gamepak_filename[0] == '\0') return;
 
   // Guard: ensure save directory is accessible before attempting save
   // A missing or unwritable dir_state is a common cause of blue screen crashes
@@ -2686,12 +2692,16 @@ u32 menu(void)
               switch (current_option->line_number)
               {
                 case 0:  // Load State
-                  action_loadstate();
-                  repeat = 0;  // Return to game after load
+                  if (gamepak_filename[0] != '\0') {
+                    action_loadstate();
+                    repeat = 0;  // Return to game after load
+                  }
                   break;
-                case 1:  // Save State  
-                  action_savestate();
-                  repeat = 0;  // Return to game after save
+                case 1:  // Save State
+                  if (gamepak_filename[0] != '\0') {
+                    action_savestate();
+                    repeat = 0;  // Return to game after save
+                  }
                   break;
                 case 13: // "Load Game"
                   menu_load_file();
