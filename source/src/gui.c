@@ -1774,16 +1774,6 @@ u32 menu(void)
   void browse_dir_state(void) { browse_for_dir(dir_state, "save_state_directory"); }
   void browse_dir_cheat(void) { browse_for_dir(dir_cheat, "cheat_directory"); }
   void browse_dir_snap(void)  { browse_for_dir(dir_snap,  "snapshot_directory"); }
-  {
-    if (!first_load)
-    {
-      reset_gba();
-      reg[CHANGED_PC_STATUS] = 1;
-
-      return_value = 1;
-      repeat = 0;
-    }
-  }
 
   void menu_screen_capture(void)
   {
