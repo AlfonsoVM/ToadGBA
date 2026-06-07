@@ -82,6 +82,12 @@ static u16 *screen_texture = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2));
 #define SCALE2X_H          (GBA_SCREEN_HEIGHT * 2)   // 320
 static u16 *scale2x_buffer = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2) + (256 * 256 * 2));
 
+// Number of GBA source rows to double for Sharp Bilinear — set from the display rect's
+// dh so we skip rows that will be clipped by the PSP screen boundary (272px).
+// ceil(dh / 2) source rows produce dh doubled rows; anything beyond is never displayed.
+// Updated by generate_display_list_scale2x_for_rect(); default = full GBA height.
+static u32 pixel_double_rows = GBA_SCREEN_HEIGHT;
+
 // Grid filter — simulates GBA LCD pixel grid
 // 0=off, 1=subtle (horizontal lines only), 2=full grid (GBA-accurate)
 #define GRID_MIN     0
@@ -4116,19 +4122,29 @@ static void apply_sharpness(void)
 // which is a much smaller interpolation than going directly from 160→272.
 static void apply_pixel_double(void)
 {
-  for (u32 sy = 0; sy < GBA_SCREEN_HEIGHT; sy++)
+  // Only process rows that will actually be visible on screen (optimization 1).
+  // pixel_double_rows = ceil(visible_dh / 2) ≤ GBA_SCREEN_HEIGHT, set per display mode.
+  for (u32 sy = 0; sy < pixel_double_rows; sy++)
   {
     u16 *src   = screen_texture + sy * GBA_LINE_SIZE;
     u16 *dst_t = scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE;
     u16 *dst_b = scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE;
 
+    // Optimization 2: prefetch the next source row into D-cache while we process this one.
+    if (sy + 1 < pixel_double_rows)
+      __builtin_prefetch(screen_texture + (sy + 1) * GBA_LINE_SIZE, 0, 1);
+
+    // Optimization 3a: write dst_t using u32 pairs (2 pixels per store).
     for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
     {
-      u16 p  = src[sx];
-      u32 p2 = ((u32)p << 16) | p;  // pack two identical u16 → one u32 write
-      ((u32 *)(dst_t))[sx] = p2;
-      ((u32 *)(dst_b))[sx] = p2;
+      u32 p2 = (u32)src[sx];
+      p2 = (p2 << 16) | p2;
+      ((u32 *)dst_t)[sx] = p2;
     }
+
+    // Optimization 3b: dst_b is identical to dst_t — use memcpy so the PSP SDK
+    // can transfer with the widest available bus width rather than recomputing.
+    memcpy(dst_b, dst_t, SCALE2X_W * sizeof(u16));
   }
 }
 
@@ -4199,6 +4215,16 @@ static void generate_display_list_scale2x_for_rect(u32 dx, u32 dy, u32 dw, u32 d
   u32 i;
   Vertex *vertices, *vertices_tmp;
 
+  // Compute how many GBA source rows are actually visible after clipping.
+  // dh doubled rows are rendered; PSP clips at 272. Visible doubled rows = min(dh, 272).
+  // Each doubled row pair comes from one source row → ceil(visible/2) source rows needed.
+  {
+    u32 visible_dh = dh < PSP_SCREEN_HEIGHT ? dh : PSP_SCREEN_HEIGHT;
+    pixel_double_rows = (visible_dh + 1) / 2;  // ceil(visible_dh / 2)
+    if (pixel_double_rows > GBA_SCREEN_HEIGHT)
+      pixel_double_rows = GBA_SCREEN_HEIGHT;
+  }
+
   sceGuStart(GU_CALL, display_list_s2x);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
@@ -4263,8 +4289,9 @@ static void bitbilt_gu(void)
     // Grid applied AFTER upscaling so borders are 1px wide (authentic LCD look)
     apply_grid_filter_2x();
 
-    // Flush only the scale2x_buffer we actually wrote — not the entire D-cache.
-    sceKernelDcacheWritebackRange(scale2x_buffer, SCALE2X_H * SCALE2X_LINE_SIZE * sizeof(u16));
+    // Flush only the rows we actually wrote (pixel_double_rows × 2 doubled rows).
+    sceKernelDcacheWritebackRange(scale2x_buffer,
+      pixel_double_rows * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
     // Only re-point GPU texture at scale2x_buffer if it was previously on screen_texture.
