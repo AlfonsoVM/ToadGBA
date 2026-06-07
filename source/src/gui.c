@@ -576,7 +576,7 @@ static void save_recent_games(void) {
   }
 }
 
-static void add_recent_game(const char *game_path) {
+void add_recent_game(const char *game_path) {
   if (!game_path || strlen(game_path) == 0) return;
   
   // Check if game already exists in recent list
@@ -1729,14 +1729,24 @@ u32 menu(void)
         return;
       }
 
-      // Track recently played game with full path
+      // Track recently played game with full path.
+      // For normal picks load_file() already chdir'd into the game directory,
+      // so getcwd() gives us a reliable absolute path — no dependency on
+      // dir_roms having (or not having) a trailing slash.
       char full_game_path[MAX_PATH];
       if (filename_buffer[0] == '/' || strstr(filename_buffer, ":/")) {
-        // Already a full path
+        // Recent game re-selected: filename_buffer already contains the full path.
         strcpy(full_game_path, filename_buffer);
       } else {
-        // Construct full path
-        sprintf(full_game_path, "%s%s", dir_roms, filename_buffer);
+        // Normal pick: cwd is the directory that contains the selected file.
+        if (getcwd(full_game_path, MAX_PATH) != NULL) {
+          u32 len = strlen(full_game_path);
+          if (full_game_path[len - 1] != '/') { full_game_path[len] = '/'; full_game_path[len + 1] = '\0'; }
+          strcat(full_game_path, filename_buffer);
+        } else {
+          // getcwd failed — fall back to dir_roms (best effort)
+          sprintf(full_game_path, "%s/%s", dir_roms, filename_buffer);
+        }
       }
       add_recent_game(full_game_path);
 

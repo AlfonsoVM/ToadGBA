@@ -943,6 +943,31 @@ int user_main(int argc, char *argv[])
         error_msg(MSG[MSG_ERR_LOAD_GAMEPACK], CONFIRMATION_CONT);
         menu();
       }
+      else
+      {
+        // Add to recent games list. Build the full absolute path the same way
+        // menu_load_file() does: use getcwd() for normal picks (cwd = game dir),
+        // use load_filename directly if it is already an absolute path (recent game).
+        char full_game_path[MAX_PATH];
+        if (load_filename[0] == '/' || strstr(load_filename, ":/"))
+        {
+          strcpy(full_game_path, load_filename);
+        }
+        else
+        {
+          if (getcwd(full_game_path, MAX_PATH) != NULL)
+          {
+            u32 len = strlen(full_game_path);
+            if (full_game_path[len - 1] != '/') { full_game_path[len] = '/'; full_game_path[len + 1] = '\0'; }
+            strcat(full_game_path, load_filename);
+          }
+          else
+          {
+            sprintf(full_game_path, "%s/%s", dir_roms, load_filename);
+          }
+        }
+        add_recent_game(full_game_path);
+      }
     }
   }
 
