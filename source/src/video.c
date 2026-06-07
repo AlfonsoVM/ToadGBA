@@ -30,6 +30,13 @@ static u16 *lcd_dim_lut      = NULL;  // Original GBA unlit LCD
 static u16 *combined_lut     = NULL;  // Merged color+brightness LUT (single scanline pass)
 static u8 color_luts_initialized = 0;
 static u8 lut_is_identity    = 0;     // 1 when combined_lut is identity (all settings neutral)
+// Per-channel LUTs: 32 bytes each (~6 cache lines total), stay hot across all 160 scanlines.
+// Active when adjustments are channel-separable (no saturation, no color correction, no RGB boost).
+// Covers the common "just tweaked brightness/contrast/colortemp" case without 64 KB LUT thrash.
+static u8 chan_lut_r[32];
+static u8 chan_lut_g[32];
+static u8 chan_lut_b[32];
+static u8 lut_is_separable   = 0;    // 1 = use chan_lut_r/g/b instead of combined_lut
 static u8 gpu_tex_is_2x      = 0;     // 1 when GPU texture is pointing at scale2x_buffer
 
 // Sharpness — applied as a full-frame pass in bitbilt_gu before GPU upload
@@ -3652,19 +3659,62 @@ void update_scanline(void)
     }
   }
 
-  // Apply color correction + brightness via pre-merged combined LUT (single pass).
-  // If LUT is identity (all settings neutral), skip the table lookup and just set bit 15.
-  if (combined_lut)
+  // Apply color correction + brightness. Three paths, fastest to slowest:
+  //
+  // 1. Identity  — all sliders neutral, no color correction: just OR the alpha bit.
+  //    Uses u32 pairs to process 2 pixels per store (120 iterations instead of 240).
+  //
+  // 2. Separable — brightness/contrast/colortemp only (no saturation, no color correction,
+  //    no RGB boost): per-channel 32-byte LUTs (96 bytes total) that fit in a few cache
+  //    lines and stay hot across all 160 scanlines.
+  //
+  // 3. Full LUT  — saturation or color correction active: 64 KB combined_lut with
+  //    software prefetch to overlap cache-miss latency, processed as u32 pairs.
   {
+    u32 *row32 = (u32 *)screen_offset;
+
     if (lut_is_identity)
     {
-      for (u32 x = 0; x < 240; x++)
-        screen_offset[x] |= 0x8000;
+      // Opt 1: u32 pairs — OR alpha into 2 pixels per iteration
+      for (u32 x = 0; x < 120; x++)
+        row32[x] |= 0x80008000u;
     }
-    else
+    else if (lut_is_separable)
     {
-      for (u32 x = 0; x < 240; x++)
-        screen_offset[x] = combined_lut[screen_offset[x] & 0x7FFF];
+      // Opt 2: cache-hot per-channel LUTs, u32 pairs
+      for (u32 x = 0; x < 120; x++)
+      {
+        u32 pair = row32[x];
+        u32 lo   = pair        & 0x7FFF;
+        u32 hi   = (pair >> 16) & 0x7FFF;
+        u32 o_lo = ((u32)chan_lut_r[(lo >> 10) & 0x1F] << 10)
+                 | ((u32)chan_lut_g[(lo >>  5) & 0x1F] <<  5)
+                 |  (u32)chan_lut_b[ lo        & 0x1F]
+                 | 0x8000u;
+        u32 o_hi = ((u32)chan_lut_r[(hi >> 10) & 0x1F] << 10)
+                 | ((u32)chan_lut_g[(hi >>  5) & 0x1F] <<  5)
+                 |  (u32)chan_lut_b[ hi        & 0x1F]
+                 | 0x8000u;
+        row32[x] = o_lo | (o_hi << 16);
+      }
+    }
+    else if (combined_lut)
+    {
+      // Opt 3: full 64 KB LUT — u32 pairs + prefetch to hide cache-miss latency.
+      // Prefetch LUT entries for a pair 4 positions ahead while processing current pair.
+      for (u32 x = 0; x < 120; x++)
+      {
+        if (x + 4 < 120)
+        {
+          u32 ahead = row32[x + 4];
+          __builtin_prefetch(&combined_lut[ ahead        & 0x7FFF], 0, 0);
+          __builtin_prefetch(&combined_lut[(ahead >> 16) & 0x7FFF], 0, 0);
+        }
+        u32 pair = row32[x];
+        u32 lo   = pair        & 0x7FFF;
+        u32 hi   = (pair >> 16) & 0x7FFF;
+        row32[x] = (u32)combined_lut[lo] | ((u32)combined_lut[hi] << 16);
+      }
     }
   }
 
@@ -3829,9 +3879,58 @@ void rebuild_combined_lut(void)
                     option_color_g    == COLOR_RGB_DEFAULT  &&
                     option_color_b    == COLOR_RGB_DEFAULT);
 
+  // Is the adjustment channel-separable?
+  // True when: no color correction LUT, no saturation mixing, no cross-channel RGB boost.
+  // Brightness, contrast, and colortemp all operate independently per channel.
+  u8 separable = (!src &&
+                  option_saturation == SATURATION_DEFAULT &&
+                  option_color_r    == COLOR_RGB_DEFAULT  &&
+                  option_color_g    == COLOR_RGB_DEFAULT  &&
+                  option_color_b    == COLOR_RGB_DEFAULT);
+
   // Fast path: no color correction, all sliders neutral → LUT is just (i | 0x8000).
   // Mark as identity so the per-scanline loop can use a cheaper OR instead of a lookup.
-  lut_is_identity = (all_neutral && !src);
+  lut_is_identity  = (all_neutral && !src);
+  lut_is_separable = (!lut_is_identity && separable);
+
+  // Separable path: build 3×32-byte per-channel LUTs (96 bytes total, cache-hot).
+  // Covers the common "only brightness/contrast/colortemp tweaked" scenario.
+  if (lut_is_separable)
+  {
+    for (int i = 0; i < 32; i++)
+    {
+      // Expand 5-bit channel value to 8-bit
+      s32 val_r = (i * 255) / 31;
+      s32 val_g = val_r;
+      s32 val_b = val_r;
+
+      // Brightness
+      if (option_brightness != BRIGHTNESS_DEFAULT) {
+        val_r = (val_r * (s32)bright_factor) >> 8;
+        val_g = (val_g * (s32)bright_factor) >> 8;
+        val_b = (val_b * (s32)bright_factor) >> 8;
+      }
+
+      // Contrast
+      if (option_contrast != CONTRAST_DEFAULT) {
+        val_r = (((val_r - 128) * (s32)contrast_factor) >> 8) + 128;
+        val_g = (((val_g - 128) * (s32)contrast_factor) >> 8) + 128;
+        val_b = (((val_b - 128) * (s32)contrast_factor) >> 8) + 128;
+      }
+
+      // Color temperature (different per channel)
+      if (option_colortemp != COLORTEMP_DEFAULT) {
+        val_r += temp_r;
+        val_b += temp_b;
+      }
+
+      // Clamp and compress back to 5-bit
+      chan_lut_r[i] = (u8)((val_r < 0 ? 0 : val_r > 255 ? 255 : val_r) >> 3);
+      chan_lut_g[i] = (u8)((val_g < 0 ? 0 : val_g > 255 ? 255 : val_g) >> 3);
+      chan_lut_b[i] = (u8)((val_b < 0 ? 0 : val_b > 255 ? 255 : val_b) >> 3);
+    }
+    return;  // channel LUTs built — combined_lut not needed for this case
+  }
 
   for (int i = 0; i < 32768; i++)
   {
