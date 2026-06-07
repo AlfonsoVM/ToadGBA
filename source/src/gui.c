@@ -2545,8 +2545,8 @@ u32 menu(void)
         const char *src = raw_help;
         while (*src && (dst - help_buf) < 78) {
           if (src[1] == ':') {
-            if (src[0] == 'X') { *dst++ = *cancel;  src++; continue; }
-            if (src[0] == 'O') { *dst++ = *confirm; src++; continue; }
+            if (src[0] == 'X') { *dst++ = *confirm; src++; continue; }
+            if (src[0] == 'O') { *dst++ = *cancel;  src++; continue; }
           }
           *dst++ = *src++;
         }
