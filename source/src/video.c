@@ -4368,14 +4368,31 @@ static void generate_display_list_scale2x_for_rect(u32 dx, u32 dy, u32 dw, u32 d
   u32 i;
   Vertex *vertices, *vertices_tmp;
 
-  // Compute how many GBA source rows are actually visible after clipping.
-  // dh doubled rows are rendered; PSP clips at 272. Visible doubled rows = min(dh, 272).
-  // Each doubled row pair comes from one source row → ceil(visible/2) source rows needed.
+  // Compute how many GBA source rows to process.
+  //
+  // The UV endpoint is always SCALE2X_H = 320 (the full doubled texture height).
+  // Whether we can skip the bottom source rows depends on the scaling mode:
+  //
+  // Zoom mode (dh > PSP_SCREEN_HEIGHT = 272):
+  //   The GPU maps UV 0..320 to dest rows 0..dh, but PSP hardware clips output
+  //   at 272 rows. The last visible dest row (271) maps to UV ≈ 271, so the GPU
+  //   never reads texture rows 272..319. We can safely skip the bottom 24 source
+  //   rows and only write the first 136 (= ceil(272/2)) source rows.
+  //
+  // All other modes (dh ≤ 272, e.g. stretch 480×272, 4:3, 1.5×):
+  //   The GPU maps UV 0..320 across dh ≤ 272 dest rows, meaning it samples UV
+  //   values all the way to SCALE2X_H. All 160 source rows must be processed.
+  if (dh > PSP_SCREEN_HEIGHT)
   {
-    u32 visible_dh = dh < PSP_SCREEN_HEIGHT ? dh : PSP_SCREEN_HEIGHT;
-    pixel_double_rows = (visible_dh + 1) / 2;  // ceil(visible_dh / 2)
+    // Zoom/clip: skip source rows whose doubled rows fall beyond PSP screen height.
+    pixel_double_rows = (PSP_SCREEN_HEIGHT + 1) / 2;  // = 136
     if (pixel_double_rows > GBA_SCREEN_HEIGHT)
       pixel_double_rows = GBA_SCREEN_HEIGHT;
+  }
+  else
+  {
+    // All other modes: GPU samples full UV range — must write every source row.
+    pixel_double_rows = GBA_SCREEN_HEIGHT;  // = 160
   }
 
   sceGuStart(GU_CALL, display_list_s2x);
