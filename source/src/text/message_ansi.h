@@ -234,6 +234,15 @@
     // MSG_VIDEO_GRID
     "LCD Grid        : %s",
 
+    // MSG_VIDEO_COLOR_R
+    "Red boost       : %d",
+
+    // MSG_VIDEO_COLOR_G
+    "Green boost     : %d",
+
+    // MSG_VIDEO_COLOR_B
+    "Blue boost      : %d",
+
     // MSG_HELP_SUBMENU_VIDEO
     "Display mode, filter, color and image adjustments",
 
@@ -266,6 +275,9 @@
 
     // MSG_HELP_VIDEO_GRID
     "Left/Right: LCD grid (Off / Subtle rows / Full GBA pixel grid)",
+
+    // MSG_HELP_VIDEO_COLOR_RGB
+    "Left/Right: selective color boost (4=neutral, 0-3=reduce, 5-8=boost dominant hue)",
 
     // MSG_OPTION_MENU_HELP_0
     "Left/Right:Select   Description:Settings",

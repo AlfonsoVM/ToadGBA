@@ -22,7 +22,7 @@
 #include <pspiofilemgr.h>
 
 #define GPSP_CONFIG_FILENAME  "toadgba.cfg"
-#define GPSP_CONFIG_NUM       (31 + 16) // options + game pad config + overlay + aspect + compat + button mapping + resume + auto save + brightness + contrast + saturation + colortemp + sharpness + grid
+#define GPSP_CONFIG_NUM       (34 + 16) // [0..33] options, [34..49] gamepad (moved: was buggy at 25+i overlapping brightness..grid)
 #define GPSP_GAME_CONFIG_NUM  (7 + 16)
 
 #define COLOR_BG            COLOR15( 8, 15, 12)  // Soft mint green background
@@ -1488,7 +1488,8 @@ u32 menu(void)
   {
     MSG[MSG_OFF],
     MSG[MSG_ON],
-    "Scale2x"
+    "Scale2x",
+    "Sharp Bilinear"
   };
 
   const char *scale_options[] =
@@ -2184,6 +2185,9 @@ u32 menu(void)
     option_saturation          = SATURATION_DEFAULT;
     option_colortemp           = COLORTEMP_DEFAULT;
     option_sharpness           = SHARPNESS_DEFAULT;
+    option_color_r             = COLOR_RGB_DEFAULT;
+    option_color_g             = COLOR_RGB_DEFAULT;
+    option_color_b             = COLOR_RGB_DEFAULT;
     option_button_mapping      = 0;
     option_resume_on_boot      = 0;
     option_auto_save_state     = 0;
@@ -2202,7 +2206,7 @@ u32 menu(void)
 
     {NULL, NULL, NULL, "Aspect Ratio    : %s", (void*)aspect_ratio_options, &option_aspect_ratio, 4, 0, 2, STRING_SELECTION_OPTION},
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], filter_options, &option_screen_filter, 3, MSG_OPTION_MENU_HELP_2, 3),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], filter_options, &option_screen_filter, 4, MSG_OPTION_MENU_HELP_2, 3),
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_SHOW_FPS], on_off_options, &psp_fps_debug, 2, MSG_OPTION_MENU_HELP_SHOW_FPS, 4),
 
@@ -2220,7 +2224,13 @@ u32 menu(void)
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_GRID], ((const char*[]){"Off","Subtle","Full GBA"}), &option_grid, GRID_MAX + 1, MSG_HELP_VIDEO_GRID, 11),
 
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 12),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_R], &option_color_r, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 12),
+
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_G], &option_color_g, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 13),
+
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_B], &option_color_b, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 14),
+
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 15),
   };
 
   MAKE_MENU(video, NULL, NULL);
@@ -3007,10 +3017,13 @@ s32 save_config_file(void)
     file_options[28]  = option_colortemp;
     file_options[29]  = option_sharpness;
     file_options[30]  = option_grid;
+    file_options[31]  = option_color_r;
+    file_options[32]  = option_color_g;
+    file_options[33]  = option_color_b;
 
     for (i = 0; i < 16; i++)
     {
-      file_options[25 + i] = gamepad_config_map[i];
+      file_options[34 + i] = gamepad_config_map[i];
     }
 
     FILE_WRITE_ARRAY(config_file, file_options);
@@ -3055,7 +3068,7 @@ s32 load_game_config_file(void)
 
       option_screen_scale   = file_options[0] % 4;
       option_screen_mag     = file_options[1] % 201;
-      option_screen_filter  = file_options[2] % 3;
+      option_screen_filter  = file_options[2] % 4;
       option_frameskip_type  = file_options[3] % 3;
       option_frameskip_value = file_options[4];
       option_clock_speed     = file_options[5] % 4;
@@ -3119,7 +3132,7 @@ s32 load_config_file(void)
 
       option_screen_scale   = file_options[0] % 4;
       option_screen_mag     = file_options[1] % 201;
-      option_screen_filter  = file_options[2] % 3;
+      option_screen_filter  = file_options[2] % 4;
       psp_fps_debug       = file_options[3] % 2;
       option_frameskip_type  = file_options[4] % 3;
       option_frameskip_value = file_options[5];
@@ -3148,13 +3161,16 @@ s32 load_config_file(void)
       option_colortemp  = file_options[28] % (COLORTEMP_MAX  + 1);
       option_sharpness  = file_options[29] % (SHARPNESS_MAX  + 1);
       option_grid       = file_options[30] % (GRID_MAX       + 1);
-      
+      option_color_r    = file_options[31] % (COLOR_RGB_MAX  + 1);
+      option_color_g    = file_options[32] % (COLOR_RGB_MAX  + 1);
+      option_color_b    = file_options[33] % (COLOR_RGB_MAX  + 1);
+
       // Update memory timing when loading config
       set_compatibility_mode(option_compatibility_mode);
 
       for (i = 0; i < 16; i++)
       {
-        gamepad_config_map[i] = file_options[25 + i] % (BUTTON_ID_NONE + 1);
+        gamepad_config_map[i] = file_options[34 + i] % (BUTTON_ID_NONE + 1);
 
         if (gamepad_config_map[i] == BUTTON_ID_MENU)
           menu_button = i;

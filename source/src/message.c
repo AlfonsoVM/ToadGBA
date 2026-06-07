@@ -619,6 +619,18 @@ const char *message[4][MSG_END] =
     // MSG_ERR_QUIT
     "�����{�^���������ƏI�����܂��B",
 
+    // MSG_VIDEO_COLOR_R
+    "Red boost       : %d",
+
+    // MSG_VIDEO_COLOR_G
+    "Green boost     : %d",
+
+    // MSG_VIDEO_COLOR_B
+    "Blue boost      : %d",
+
+    // MSG_HELP_VIDEO_COLOR_RGB
+    "Left/Right: selective color boost (4=neutral, 0-3=reduce, 5-8=boost dominant hue)",
+
     // MSG_BLANK
     ""
   },

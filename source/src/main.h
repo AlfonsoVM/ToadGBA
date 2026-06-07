@@ -29,9 +29,10 @@
 #define SCALED_USER   3
 
 // video filter type
-#define FILTER_NEAREST  0
-#define FILTER_BILINEAR 1
-#define FILTER_SCALE2X  2
+#define FILTER_NEAREST        0
+#define FILTER_BILINEAR       1
+#define FILTER_SCALE2X        2
+#define FILTER_SHARP_BILINEAR 3   // CPU 2x pixel double + GPU bilinear for sub-integer step
 
 // color correction modes
 #define COLOR_CORRECTION_OFF      0
@@ -65,6 +66,11 @@
 #define GRID_MIN     0
 #define GRID_DEFAULT 0
 #define GRID_MAX     2
+
+// per-channel RGB gain (0-8, 4=neutral/1.0x, 0=black, 8=2x)
+#define COLOR_RGB_MIN     0
+#define COLOR_RGB_DEFAULT 4
+#define COLOR_RGB_MAX     8
 
 // color temperature (0=warm/amber, 4=neutral, 8=cool/blue)
 #define COLORTEMP_MIN     0
@@ -125,6 +131,9 @@ extern u32 option_saturation;
 extern u32 option_colortemp;
 extern u32 option_sharpness;
 extern u32 option_grid;
+extern u32 option_color_r;
+extern u32 option_color_g;
+extern u32 option_color_b;
 extern u32 option_button_mapping;
 extern u32 option_resume_on_boot;
 extern u32 option_auto_save_state;

@@ -29,6 +29,7 @@ static u16 *agb101_color_lut = NULL;  // GBA SP AGS-101 backlit screen
 static u16 *lcd_dim_lut      = NULL;  // Original GBA unlit LCD
 static u16 *combined_lut     = NULL;  // Merged color+brightness LUT (single scanline pass)
 static u8 color_luts_initialized = 0;
+static u8 lut_is_identity    = 0;     // 1 when combined_lut is identity (all settings neutral)
 
 // Sharpness — applied as a full-frame pass in bitbilt_gu before GPU upload
 // 0=off, 1=subtle, 2=medium, 3=strong
@@ -86,38 +87,124 @@ static u16 *scale2x_buffer = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2) + (256 * 2
 #define GRID_DEFAULT 0
 #define GRID_MAX     2
 
-// Blend helper: darken a RGB555 pixel by factor/32
-#define GRID_DARKEN(px, factor) \
-  ((u16)(((((px) >> 10) & 0x1F) * (factor) / 32) << 10) | \
-         (((((px) >>  5) & 0x1F) * (factor) / 32) <<  5) | \
-         (((((px)       ) & 0x1F) * (factor) / 32)      ) | 0x8000)
+// Per-channel darkening LUT: lut[i] = (i * factor) >> 5 for i=0..31.
+// Used only to build the full-pixel grid_px_lut tables below.
+static const u8 grid_lut30[32] = { // factor 30/32 ≈ 94% (subtle)
+   0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,
+  15,16,17,17,18,19,20,21,22,23,24,25,26,27,28,29
+};
+static const u8 grid_lut28[32] = { // factor 28/32 = 87.5% (edge)
+   0, 0, 1, 2, 3, 3, 5, 6, 7, 7, 8, 9,10,10,12,13,
+  14,14,15,16,17,18,19,19,21,22,23,23,24,25,26,27
+};
+static const u8 grid_lut24[32] = { // factor 24/32 = 75% (corner)
+   0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 9, 9,10,11,
+  12,12,13,14,15,15,16,17,18,18,19,20,21,21,22,23
+};
 
+// Full-pixel darkening LUTs: 32768 entries (one per RGB555 value).
+// Replace 3 per-channel lookups + 3 shifts per pixel with a single u16 table read.
+// Built once at startup in init_grid_pixel_luts(); negligible heap cost (192 KB total).
+static u16 *grid_px_lut30 = NULL;  // subtle row darkening
+static u16 *grid_px_lut28 = NULL;  // edge column darkening
+static u16 *grid_px_lut24 = NULL;  // corner darkening
+
+static void init_grid_pixel_luts(void)
+{
+  if (grid_px_lut30) return;  // already built
+  grid_px_lut30 = (u16 *)malloc(32768 * sizeof(u16));
+  grid_px_lut28 = (u16 *)malloc(32768 * sizeof(u16));
+  grid_px_lut24 = (u16 *)malloc(32768 * sizeof(u16));
+  for (int i = 0; i < 32768; i++)
+  {
+    u32 r = (i >> 10) & 0x1F;
+    u32 g = (i >>  5) & 0x1F;
+    u32 b =  i        & 0x1F;
+    grid_px_lut30[i] = (u16)((grid_lut30[r] << 10) | (grid_lut30[g] << 5) | grid_lut30[b] | 0x8000);
+    grid_px_lut28[i] = (u16)((grid_lut28[r] << 10) | (grid_lut28[g] << 5) | grid_lut28[b] | 0x8000);
+    grid_px_lut24[i] = (u16)((grid_lut24[r] << 10) | (grid_lut24[g] << 5) | grid_lut24[b] | 0x8000);
+  }
+}
+
+// Legacy per-channel macro (kept for reference; no longer used in hot paths)
+#define GRID_DARKEN_LUT(px, lut) \
+  ((u16)((u16)(lut[((px) >> 10) & 0x1F] << 10) | \
+         (u16)(lut[((px) >>  5) & 0x1F] <<  5) | \
+         (u16)(lut[( px)        & 0x1F]       ) | 0x8000))
+
+// Grid filter on native 240×160 buffer (non-2x modes).
+// Loop structure avoids inner-loop conditionals: odd/even rows handled separately.
 static void apply_grid_filter(void)
 {
   extern u32 option_grid;
   if (option_grid == 0) return;
 
-  for (u32 y = 0; y < GBA_SCREEN_HEIGHT; y++)
+  for (u32 y = 1; y < GBA_SCREEN_HEIGHT; y += 2)
   {
     u16 *row = screen_texture + y * GBA_LINE_SIZE;
-    u8 dark_row = (y & 1);
 
-    for (u32 x = 0; x < GBA_SCREEN_WIDTH; x++)
+    if (option_grid == 1)
     {
-      u16 px = row[x];
-      if (option_grid == 1)
-      {
-        if (dark_row)
-          row[x] = GRID_DARKEN(px, 26);
-      }
-      else
-      {
-        u8 dark_col = (x & 1);
-        if (dark_row && dark_col)
-          row[x] = GRID_DARKEN(px, 20);
-        else if (dark_row || dark_col)
-          row[x] = GRID_DARKEN(px, 24);
-      }
+      // Subtle: darken entire odd row — single pixel LUT lookup per pixel
+      for (u32 x = 0; x < GBA_SCREEN_WIDTH; x++)
+        row[x] = grid_px_lut30[row[x] & 0x7FFF];
+    }
+    else
+    {
+      // Full: odd rows — even cols lut28, odd cols lut24 (two separate passes, no conditional)
+      for (u32 x = 0; x < GBA_SCREEN_WIDTH; x += 2)
+        row[x] = grid_px_lut28[row[x] & 0x7FFF];
+      for (u32 x = 1; x < GBA_SCREEN_WIDTH; x += 2)
+        row[x] = grid_px_lut24[row[x] & 0x7FFF];
+    }
+  }
+
+  // Full grid: also darken odd columns on even rows
+  if (option_grid == 2)
+  {
+    for (u32 y = 0; y < GBA_SCREEN_HEIGHT; y += 2)
+    {
+      u16 *row = screen_texture + y * GBA_LINE_SIZE;
+      for (u32 x = 1; x < GBA_SCREEN_WIDTH; x += 2)
+        row[x] = grid_px_lut28[row[x] & 0x7FFF];
+    }
+  }
+}
+
+// Grid filter on scale2x_buffer (480×320) for 2x modes.
+// 1-pixel-wide borders between GBA pixels — authentic LCD look at zero extra conditionals.
+static void apply_grid_filter_2x(void)
+{
+  extern u32 option_grid;
+  if (option_grid == 0) return;
+
+  if (option_grid == 1)
+  {
+    // Subtle: darken only odd rows — single pixel LUT lookup per pixel
+    for (u32 dy = 1; dy < SCALE2X_H; dy += 2)
+    {
+      u16 *row = scale2x_buffer + dy * SCALE2X_LINE_SIZE;
+      for (u32 dx = 0; dx < SCALE2X_W; dx++)
+        row[dx] = grid_px_lut30[row[dx] & 0x7FFF];
+    }
+  }
+  else
+  {
+    // Full: odd rows — two passes (no inner conditional)
+    for (u32 dy = 1; dy < SCALE2X_H; dy += 2)
+    {
+      u16 *row = scale2x_buffer + dy * SCALE2X_LINE_SIZE;
+      for (u32 dx = 0; dx < SCALE2X_W; dx += 2)
+        row[dx] = grid_px_lut28[row[dx] & 0x7FFF];
+      for (u32 dx = 1; dx < SCALE2X_W; dx += 2)
+        row[dx] = grid_px_lut24[row[dx] & 0x7FFF];
+    }
+    // Even rows — only odd columns (right edge of each GBA pixel's 2x block)
+    for (u32 dy = 0; dy < SCALE2X_H; dy += 2)
+    {
+      u16 *row = scale2x_buffer + dy * SCALE2X_LINE_SIZE;
+      for (u32 dx = 1; dx < SCALE2X_W; dx += 2)
+        row[dx] = grid_px_lut28[row[dx] & 0x7FFF];
     }
   }
 }
@@ -198,7 +285,7 @@ const u8 ALIGN_DATA active_layers[8] =
 void set_gba_resolution(void);
 static void generate_display_list(float mag);
 static void generate_display_list_stretch(void);
-static void generate_display_list_scale2x(void);
+static void generate_display_list_scale2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh);
 static void bitbilt_gu(void);
 static void bitbilt_sw(void);
 
@@ -3537,12 +3624,19 @@ void update_scanline(void)
     }
   }
 
-  // Apply color correction + brightness via pre-merged combined LUT (single pass)
+  // Apply color correction + brightness via pre-merged combined LUT (single pass).
+  // If LUT is identity (all settings neutral), skip the table lookup and just set bit 15.
   if (combined_lut)
   {
-    for (u32 x = 0; x < 240; x++)
+    if (lut_is_identity)
     {
-      screen_offset[x] = combined_lut[screen_offset[x] & 0x7FFF];
+      for (u32 x = 0; x < 240; x++)
+        screen_offset[x] |= 0x8000;
+    }
+    else
+    {
+      for (u32 x = 0; x < 240; x++)
+        screen_offset[x] = combined_lut[screen_offset[x] & 0x7FFF];
     }
   }
 
@@ -3664,6 +3758,9 @@ void rebuild_combined_lut(void)
   extern u32 option_contrast;
   extern u32 option_saturation;
   extern u32 option_colortemp;
+  extern u32 option_color_r;
+  extern u32 option_color_g;
+  extern u32 option_color_b;
 
   if (!combined_lut)
     combined_lut = (u16*)safe_malloc(32768 * sizeof(u16));
@@ -3699,7 +3796,14 @@ void rebuild_combined_lut(void)
   u8 all_neutral = (option_brightness == BRIGHTNESS_DEFAULT &&
                     option_contrast   == CONTRAST_DEFAULT   &&
                     option_saturation == SATURATION_DEFAULT &&
-                    option_colortemp  == COLORTEMP_DEFAULT);
+                    option_colortemp  == COLORTEMP_DEFAULT  &&
+                    option_color_r    == COLOR_RGB_DEFAULT  &&
+                    option_color_g    == COLOR_RGB_DEFAULT  &&
+                    option_color_b    == COLOR_RGB_DEFAULT);
+
+  // Fast path: no color correction, all sliders neutral → LUT is just (i | 0x8000).
+  // Mark as identity so the per-scanline loop can use a cheaper OR instead of a lookup.
+  lut_is_identity = (all_neutral && !src);
 
   for (int i = 0; i < 32768; i++)
   {
@@ -3743,6 +3847,33 @@ void rebuild_combined_lut(void)
     if (option_colortemp != COLORTEMP_DEFAULT) {
       r += temp_r;
       b += temp_b;
+    }
+
+    // Step 6: Selective color boost (option 0-8, 4=neutral)
+    // Only boosts/cuts pixels where that channel is dominant over the others.
+    // Gray/neutral pixels are unaffected; already-red pixels become more/less vivid.
+    // boost = (option - 4) as signed offset in [0..256] units.
+    // Applied as: excess = channel - avg(other two); out = channel + excess * boost / 256
+    if (option_color_r != COLOR_RGB_DEFAULT) {
+      s32 excess = r - ((g + b) >> 1);
+      if (excess > 0) {
+        s32 boost = (s32)option_color_r - 4; // -4..+4
+        r += (excess * boost * 32) >> 8;     // scale: 32/256 ≈ 12% per step
+      }
+    }
+    if (option_color_g != COLOR_RGB_DEFAULT) {
+      s32 excess = g - ((r + b) >> 1);
+      if (excess > 0) {
+        s32 boost = (s32)option_color_g - 4;
+        g += (excess * boost * 32) >> 8;
+      }
+    }
+    if (option_color_b != COLOR_RGB_DEFAULT) {
+      s32 excess = b - ((r + g) >> 1);
+      if (excess > 0) {
+        s32 boost = (s32)option_color_b - 4;
+        b += (excess * boost * 32) >> 8;
+      }
     }
 
     // Clamp to 0-255
@@ -3790,13 +3921,13 @@ void init_video(int devkit_version)
   sceGuDisplay(GU_TRUE);
 
   generate_display_list(1.5);
-  generate_display_list_scale2x();
   update_screen = bitbilt_gu;
 
   load_volume_icon(devkit_version);
   
   // Initialize color correction lookup tables for performance
   init_color_correction_luts();
+  init_grid_pixel_luts();
   
   // Initialize layer merging cache
   init_layer_cache();
@@ -3912,6 +4043,9 @@ static void generate_display_list(float mag)
   }
 
   sceGuFinish();
+
+  // Also build Scale2x companion list for this same rect (UV doubled, same XY)
+  generate_display_list_scale2x_for_rect(dx, dy, dw, dh);
 }
 
 // Sharpness filter — unsharp mask applied to screen_texture before GPU upload.
@@ -3975,6 +4109,28 @@ static void apply_sharpness(void)
   }
 }
 
+// Sharp Bilinear: simple 2× pixel doubling 240×160 → 480×320 into scale2x_buffer.
+// Each GBA pixel becomes an exact 2×2 block — no smoothing, no rounding.
+// GPU then applies bilinear only for the sub-integer vertical step (320→272),
+// which is a much smaller interpolation than going directly from 160→272.
+static void apply_pixel_double(void)
+{
+  for (u32 sy = 0; sy < GBA_SCREEN_HEIGHT; sy++)
+  {
+    u16 *src   = screen_texture + sy * GBA_LINE_SIZE;
+    u16 *dst_t = scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE;
+    u16 *dst_b = scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE;
+
+    for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
+    {
+      u16 p  = src[sx];
+      u32 p2 = ((u32)p << 16) | p;  // pack two identical u16 → one u32 write
+      ((u32 *)(dst_t))[sx] = p2;
+      ((u32 *)(dst_b))[sx] = p2;
+    }
+  }
+}
+
 // AdvMAME2x Scale2x: 240×160 → 480×320 into scale2x_buffer.
 // For each source pixel E with neighbours B(above) D(left) F(right) H(below):
 //   P1(top-left)     = (D==B && D!=H && B!=F) ? D : E
@@ -3985,20 +4141,29 @@ static void apply_scale2x(void)
 {
   for (u32 sy = 0; sy < GBA_SCREEN_HEIGHT; sy++)
   {
-    u16 *src   = screen_texture + sy                             * GBA_LINE_SIZE;
-    u16 *src_u = screen_texture + (sy > 0 ? sy - 1 : 0)        * GBA_LINE_SIZE;
-    u16 *src_d = screen_texture + (sy < GBA_SCREEN_HEIGHT - 1
-                                    ? sy + 1 : GBA_SCREEN_HEIGHT - 1) * GBA_LINE_SIZE;
+    u16 *src   = screen_texture + sy * GBA_LINE_SIZE;
+    u16 *src_u = screen_texture + (sy > 0                  ? sy - 1 : 0)                    * GBA_LINE_SIZE;
+    u16 *src_d = screen_texture + (sy < GBA_SCREEN_HEIGHT-1 ? sy + 1 : GBA_SCREEN_HEIGHT-1) * GBA_LINE_SIZE;
 
-    u16 *dst_t = scale2x_buffer + (sy * 2)       * SCALE2X_LINE_SIZE;
-    u16 *dst_b = scale2x_buffer + (sy * 2 + 1)   * SCALE2X_LINE_SIZE;
+    u16 *dst_t = scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE;
+    u16 *dst_b = scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE;
 
-    for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
+    // --- Left edge pixel (sx=0): D=E, no left neighbour ---
+    {
+      u16 B = src_u[0], E = src[0], F = src[1], H = src_d[0];
+      dst_t[0] = E;  // D==E so (D==B && D!=H && B!=F) can only differ if E==B, but D=E, treat as E
+      dst_t[1] = (B == F && B != E && F != H) ? F : E;
+      dst_b[0] = E;
+      dst_b[1] = (H == F && E != H && B != F) ? F : E;
+    }
+
+    // --- Main loop: sx=1..GBA_SCREEN_WIDTH-2 — no boundary checks needed ---
+    for (u32 sx = 1; sx < GBA_SCREEN_WIDTH - 1; sx++)
     {
       u16 B = src_u[sx];
-      u16 D = sx > 0                  ? src[sx - 1] : src[sx];
+      u16 D = src[sx - 1];
       u16 E = src[sx];
-      u16 F = sx < GBA_SCREEN_WIDTH-1 ? src[sx + 1] : src[sx];
+      u16 F = src[sx + 1];
       u16 H = src_d[sx];
 
       dst_t[sx*2]   = (D == B && D != H && B != F) ? D : E;
@@ -4006,23 +4171,36 @@ static void apply_scale2x(void)
       dst_b[sx*2]   = (D == H && D != B && H != F) ? D : E;
       dst_b[sx*2+1] = (H == F && D != H && B != F) ? F : E;
     }
+
+    // --- Right edge pixel (sx=W-1): F=E, no right neighbour ---
+    {
+      u32 sx = GBA_SCREEN_WIDTH - 1;
+      u16 B = src_u[sx], D = src[sx-1], E = src[sx], H = src_d[sx];
+      dst_t[sx*2]   = (D == B && D != H && B != E) ? D : E;
+      dst_t[sx*2+1] = E;
+      dst_b[sx*2]   = (D == H && D != B && H != E) ? D : E;
+      dst_b[sx*2+1] = E;
+    }
   }
 }
 
-// Display list for Scale2x: maps scale2x_buffer (480×320) → PSP screen (480×272).
-// GU compresses 320→272 rows with nearest-neighbor (only ~1.18× vertical, near 1:1).
-// Must be called after GU is fully initialised (from init_video).
-static void generate_display_list_scale2x(void)
+// Scale2x companion display list: same screen rect as the current display mode,
+// but UV coordinates are doubled (u=0..480, v=0..320) to map scale2x_buffer correctly.
+//
+// Key insight for zoom/2× mode: dh=320 > PSP height 272, so GU clips the bottom
+// naturally → every visible screen row maps 1:1 to exactly one texture row,
+// eliminating the vertical compression that caused rounded/blurred letters.
+//
+// For other modes (4:3, stretch, 1.5×) where dh ≤ 272, GU compresses 320→dh rows;
+// some minor interpolation occurs but aspect ratio and magnification are respected.
+static void generate_display_list_scale2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh)
 {
   u32 i;
   Vertex *vertices, *vertices_tmp;
 
   sceGuStart(GU_CALL, display_list_s2x);
-
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
-  // GU texture is set dynamically in bitbilt_gu when Scale2x is active.
-  // The vertices map u=0..480, v=0..320 → x=0..480, y=0..272.
   vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
 
   if (vertices != NULL)
@@ -4032,31 +4210,31 @@ static void generate_display_list_scale2x(void)
 
     for (i = 0; (i + SLICE) < GBA_SCREEN_WIDTH; i += SLICE)
     {
-      vertices_tmp[0].u = i * 2;
+      // UV: doubled x (0..480), full y (0..320)
+      // XY: same proportional slice of the destination rect as the normal display list
+      vertices_tmp[0].u = (u16)(i * 2);
       vertices_tmp[0].v = 0;
-      vertices_tmp[0].x = i * 2;
-      vertices_tmp[0].y = 0;
+      vertices_tmp[0].x = (u16)(dx + (i * dw) / GBA_SCREEN_WIDTH);
+      vertices_tmp[0].y = (u16)dy;
 
-      vertices_tmp[1].u = (i + SLICE) * 2;
-      vertices_tmp[1].v = SCALE2X_H;
-      vertices_tmp[1].x = (i + SLICE) * 2;
-      vertices_tmp[1].y = PSP_SCREEN_HEIGHT;
+      vertices_tmp[1].u = (u16)((i + SLICE) * 2);
+      vertices_tmp[1].v = (u16)SCALE2X_H;
+      vertices_tmp[1].x = (u16)(dx + ((i + SLICE) * dw) / GBA_SCREEN_WIDTH);
+      vertices_tmp[1].y = (u16)(dy + dh);
 
       vertices_tmp += 2;
     }
 
-    if (i < GBA_SCREEN_WIDTH)
-    {
-      vertices_tmp[0].u = i * 2;
-      vertices_tmp[0].v = 0;
-      vertices_tmp[0].x = i * 2;
-      vertices_tmp[0].y = 0;
+    // Final (remainder) slice
+    vertices_tmp[0].u = (u16)(i * 2);
+    vertices_tmp[0].v = 0;
+    vertices_tmp[0].x = (u16)(dx + (i * dw) / GBA_SCREEN_WIDTH);
+    vertices_tmp[0].y = (u16)dy;
 
-      vertices_tmp[1].u = SCALE2X_W;
-      vertices_tmp[1].v = SCALE2X_H;
-      vertices_tmp[1].x = PSP_SCREEN_WIDTH;
-      vertices_tmp[1].y = PSP_SCREEN_HEIGHT;
-    }
+    vertices_tmp[1].u = (u16)SCALE2X_W;
+    vertices_tmp[1].v = (u16)SCALE2X_H;
+    vertices_tmp[1].x = (u16)(dx + dw);
+    vertices_tmp[1].y = (u16)(dy + dh);
 
     sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D,
                    VERTEX_COUNT, 0, vertices);
@@ -4070,36 +4248,42 @@ static void bitbilt_gu(void)
   // Apply sharpness filter before handing texture to GPU
   apply_sharpness();
 
-  // Apply LCD grid filter (after sharpness so it doesn't get sharpened away)
-  apply_grid_filter();
-
-  if (option_screen_filter == FILTER_SCALE2X)
+  if (option_screen_filter == FILTER_SCALE2X || option_screen_filter == FILTER_SHARP_BILINEAR)
   {
-    apply_scale2x();
-    sceKernelDcacheWritebackAll();
+    // Both Scale2x and Sharp Bilinear upscale to scale2x_buffer (480×320) first,
+    // then GU presents from that buffer using display_list_s2x.
+    // Scale2x uses GU_NEAREST (edge-aware, no blur).
+    // Sharp Bilinear uses GU_LINEAR (pixel-perfect 2× blocks + bilinear for 320→272 step).
+    if (option_screen_filter == FILTER_SCALE2X)
+      apply_scale2x();
+    else
+      apply_pixel_double();
+
+    // Grid applied AFTER upscaling so borders are 1px wide (authentic LCD look)
+    apply_grid_filter_2x();
+
+    // Flush only the scale2x_buffer we actually wrote — not the entire D-cache.
+    sceKernelDcacheWritebackRange(scale2x_buffer, SCALE2X_H * SCALE2X_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
-
-    // Point GU at the Scale2x buffer (512×512 texture, 480×320 used)
     sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
     sceGuTexFlush();
     sceGuCallList(display_list_s2x);
-
-    sceGuFinish();
-    sceGuSync(0, GU_SYNC_FINISH);
-
-    // Restore texture to screen_texture for next frame
-    sceGuStart(GU_DIRECT, display_list);
-    sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
-    sceGuTexFlush();
     sceGuFinish();
     sceGuSync(0, GU_SYNC_FINISH);
   }
   else
   {
-    sceKernelDcacheWritebackAll();
+    // Native (non-2x) path: apply grid on 240×160 texture before GPU
+    apply_grid_filter();
 
+    // Flush only the screen_texture rows we rendered — not the entire D-cache.
+    sceKernelDcacheWritebackRange(screen_texture, GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
+
+    // Set texture explicitly each frame so switching from 2x mode works correctly.
     sceGuStart(GU_DIRECT, display_list);
+    sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
+    sceGuTexFlush();
     sceGuCallList(display_list_0);
     sceGuFinish();
     sceGuSync(0, GU_SYNC_FINISH);
@@ -4163,6 +4347,9 @@ static void generate_display_list_4x3(void)
   }
 
   sceGuFinish();
+
+  // Scale2x companion list for 4:3 mode
+  generate_display_list_scale2x_for_rect(dx, dy, dw, dh);
 }
 
 // Stretch display list - stretches GBA screen to fill entire PSP screen (480x272)
@@ -4228,6 +4415,9 @@ static void generate_display_list_stretch(void)
   }
 
   sceGuFinish();
+
+  // Scale2x companion list for stretch mode
+  generate_display_list_scale2x_for_rect(dx, dy, dw, dh);
 }
 
 
@@ -4298,8 +4488,14 @@ void video_resolution_small(void)
   sceGuClearColor(0);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
-  // Scale2x does its own nearest-neighbor via CPU; clamp to valid GU values (0 or 1)
-  u32 gu_filter = (option_screen_filter == FILTER_SCALE2X) ? GU_NEAREST : option_screen_filter;
+  // Map filter option to a valid GU value (GU_NEAREST=0, GU_LINEAR=1).
+  // Scale2x:        CPU handles the upscale; GU presents with nearest (no extra blur).
+  // Sharp Bilinear: CPU does 2× pixel double; GU applies bilinear for the 320→272 step.
+  // Nearest/Bilinear: pass directly to GU.
+  u32 gu_filter;
+  if      (option_screen_filter == FILTER_SCALE2X)        gu_filter = GU_NEAREST;
+  else if (option_screen_filter == FILTER_SHARP_BILINEAR) gu_filter = GU_LINEAR;
+  else                                                     gu_filter = option_screen_filter;
   sceGuTexFilter(gu_filter, gu_filter);
 
   sceGuFinish();
