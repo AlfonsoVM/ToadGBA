@@ -94,9 +94,10 @@ static u32 pixel_double_rows = GBA_SCREEN_HEIGHT;
 #define GRID_DEFAULT 0
 #define GRID_MAX     2
 
-// Per-channel darkening LUT: lut[i] = (i * factor) >> 5 for i=0..31.
-// Used only to build the full-pixel grid_px_lut tables below.
-static const u8 grid_lut30[32] = { // factor 30/32 ≈ 94% (subtle)
+// Per-channel darkening LUTs — 32 bytes each (fit in one cache line each, stay hot).
+// lut[i] = floor(i * factor / 32) for i = 0..31.
+// 192 KB of full-pixel LUTs eliminated — random pixel access no longer causes cache thrash.
+static const u8 grid_lut30[32] = { // factor 30/32 ≈ 94% (subtle row)
    0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,
   15,16,17,17,18,19,20,21,22,23,24,25,26,27,28,29
 };
@@ -109,109 +110,129 @@ static const u8 grid_lut24[32] = { // factor 24/32 = 75% (corner)
   12,12,13,14,15,15,16,17,18,18,19,20,21,21,22,23
 };
 
-// Full-pixel darkening LUTs: 32768 entries (one per RGB555 value).
-// Replace 3 per-channel lookups + 3 shifts per pixel with a single u16 table read.
-// Built once at startup in init_grid_pixel_luts(); negligible heap cost (192 KB total).
-static u16 *grid_px_lut30 = NULL;  // subtle row darkening
-static u16 *grid_px_lut28 = NULL;  // edge column darkening
-static u16 *grid_px_lut24 = NULL;  // corner darkening
-
-static void init_grid_pixel_luts(void)
-{
-  if (grid_px_lut30) return;  // already built
-  grid_px_lut30 = (u16 *)malloc(32768 * sizeof(u16));
-  grid_px_lut28 = (u16 *)malloc(32768 * sizeof(u16));
-  grid_px_lut24 = (u16 *)malloc(32768 * sizeof(u16));
-  for (int i = 0; i < 32768; i++)
-  {
-    u32 r = (i >> 10) & 0x1F;
-    u32 g = (i >>  5) & 0x1F;
-    u32 b =  i        & 0x1F;
-    grid_px_lut30[i] = (u16)((grid_lut30[r] << 10) | (grid_lut30[g] << 5) | grid_lut30[b] | 0x8000);
-    grid_px_lut28[i] = (u16)((grid_lut28[r] << 10) | (grid_lut28[g] << 5) | grid_lut28[b] | 0x8000);
-    grid_px_lut24[i] = (u16)((grid_lut24[r] << 10) | (grid_lut24[g] << 5) | grid_lut24[b] | 0x8000);
-  }
-}
-
-// Legacy per-channel macro (kept for reference; no longer used in hot paths)
-#define GRID_DARKEN_LUT(px, lut) \
-  ((u16)((u16)(lut[((px) >> 10) & 0x1F] << 10) | \
-         (u16)(lut[((px) >>  5) & 0x1F] <<  5) | \
-         (u16)(lut[( px)        & 0x1F]       ) | 0x8000))
+// Darken an RGB555 pixel using a per-channel LUT. 3 table reads + 2 shifts + OR.
+// All three LUTs fit in ~6 cache lines and stay hot across an entire frame.
+#define GRID_DARKEN(px, lut) \
+  ((u32)(lut[((px) >> 10) & 0x1F] << 10) | \
+   (u32)(lut[((px) >>  5) & 0x1F] <<  5) | \
+   (u32)(lut[( px)        & 0x1F]       ) | 0x8000u)
 
 // Grid filter on native 240×160 buffer (non-2x modes).
-// Loop structure avoids inner-loop conditionals: odd/even rows handled separately.
+// Optimisations: cache-hot channel LUTs, u32 pairs, row prefetch.
 static void apply_grid_filter(void)
 {
   extern u32 option_grid;
   if (option_grid == 0) return;
 
+  // --- Odd rows (horizontal grid lines) ---
   for (u32 y = 1; y < GBA_SCREEN_HEIGHT; y += 2)
   {
-    u16 *row = screen_texture + y * GBA_LINE_SIZE;
+    u32 *row32 = (u32 *)(screen_texture + y * GBA_LINE_SIZE);
+
+    // Prefetch the next odd row while processing this one
+    if (y + 2 < GBA_SCREEN_HEIGHT)
+      __builtin_prefetch((u8 *)row32 + 2 * GBA_LINE_SIZE * sizeof(u16), 0, 1);
 
     if (option_grid == 1)
     {
-      // Subtle: darken entire odd row — single pixel LUT lookup per pixel
-      for (u32 x = 0; x < GBA_SCREEN_WIDTH; x++)
-        row[x] = grid_px_lut30[row[x] & 0x7FFF];
+      // Subtle: darken entire odd row with lut30, 2 pixels per u32 store
+      for (u32 x = 0; x < GBA_SCREEN_WIDTH / 2; x++)
+      {
+        u32 pair = row32[x];
+        u32 lo = pair        & 0x7FFF;
+        u32 hi = (pair >> 16) & 0x7FFF;
+        row32[x] = GRID_DARKEN(lo, grid_lut30) | (GRID_DARKEN(hi, grid_lut30) << 16);
+      }
     }
     else
     {
-      // Full: odd rows — even cols lut28, odd cols lut24 (two separate passes, no conditional)
-      for (u32 x = 0; x < GBA_SCREEN_WIDTH; x += 2)
-        row[x] = grid_px_lut28[row[x] & 0x7FFF];
-      for (u32 x = 1; x < GBA_SCREEN_WIDTH; x += 2)
-        row[x] = grid_px_lut24[row[x] & 0x7FFF];
+      // Full: even cols → lut28, odd cols → lut24; both in one pass over u32 pairs.
+      // Each u32 pair holds (even_col | odd_col<<16) in little-endian.
+      for (u32 x = 0; x < GBA_SCREEN_WIDTH / 2; x++)
+      {
+        u32 pair = row32[x];
+        u32 lo = pair        & 0x7FFF;   // even col
+        u32 hi = (pair >> 16) & 0x7FFF;  // odd col
+        row32[x] = GRID_DARKEN(lo, grid_lut28) | (GRID_DARKEN(hi, grid_lut24) << 16);
+      }
     }
   }
 
-  // Full grid: also darken odd columns on even rows
-  if (option_grid == 2)
+  if (option_grid == 1) return;
+
+  // --- Even rows, odd columns only (vertical grid lines) ---
+  for (u32 y = 0; y < GBA_SCREEN_HEIGHT; y += 2)
   {
-    for (u32 y = 0; y < GBA_SCREEN_HEIGHT; y += 2)
+    u32 *row32 = (u32 *)(screen_texture + y * GBA_LINE_SIZE);
+
+    if (y + 2 < GBA_SCREEN_HEIGHT)
+      __builtin_prefetch((u8 *)row32 + 2 * GBA_LINE_SIZE * sizeof(u16), 0, 1);
+
+    // Odd column sits in the high half of each u32 pair; preserve the even col.
+    for (u32 x = 0; x < GBA_SCREEN_WIDTH / 2; x++)
     {
-      u16 *row = screen_texture + y * GBA_LINE_SIZE;
-      for (u32 x = 1; x < GBA_SCREEN_WIDTH; x += 2)
-        row[x] = grid_px_lut28[row[x] & 0x7FFF];
+      u32 pair = row32[x];
+      u32 hi = (pair >> 16) & 0x7FFF;
+      row32[x] = (pair & 0x0000FFFFu) | (GRID_DARKEN(hi, grid_lut28) << 16);
     }
   }
 }
 
-// Grid filter on scale2x_buffer (480×320) for 2x modes.
-// 1-pixel-wide borders between GBA pixels — authentic LCD look at zero extra conditionals.
+// Grid filter on scale2x_buffer (480×320) — used by Scale2x mode only.
+// Sharp Bilinear integrates the grid directly inside apply_pixel_double(),
+// so this function is not called for that mode.
+// Optimisations: cache-hot channel LUTs, u32 pairs, row prefetch.
 static void apply_grid_filter_2x(void)
 {
   extern u32 option_grid;
   if (option_grid == 0) return;
 
-  if (option_grid == 1)
+  // --- Odd rows ---
+  for (u32 dy = 1; dy < SCALE2X_H; dy += 2)
   {
-    // Subtle: darken only odd rows — single pixel LUT lookup per pixel
-    for (u32 dy = 1; dy < SCALE2X_H; dy += 2)
+    u32 *row32 = (u32 *)(scale2x_buffer + dy * SCALE2X_LINE_SIZE);
+
+    if (dy + 2 < SCALE2X_H)
+      __builtin_prefetch((u8 *)row32 + 2 * SCALE2X_LINE_SIZE * sizeof(u16), 0, 1);
+
+    if (option_grid == 1)
     {
-      u16 *row = scale2x_buffer + dy * SCALE2X_LINE_SIZE;
-      for (u32 dx = 0; dx < SCALE2X_W; dx++)
-        row[dx] = grid_px_lut30[row[dx] & 0x7FFF];
+      for (u32 dx = 0; dx < SCALE2X_W / 2; dx++)
+      {
+        u32 pair = row32[dx];
+        u32 lo = pair        & 0x7FFF;
+        u32 hi = (pair >> 16) & 0x7FFF;
+        row32[dx] = GRID_DARKEN(lo, grid_lut30) | (GRID_DARKEN(hi, grid_lut30) << 16);
+      }
+    }
+    else
+    {
+      // Even cols → lut28, odd cols → lut24, one pass
+      for (u32 dx = 0; dx < SCALE2X_W / 2; dx++)
+      {
+        u32 pair = row32[dx];
+        u32 lo = pair        & 0x7FFF;
+        u32 hi = (pair >> 16) & 0x7FFF;
+        row32[dx] = GRID_DARKEN(lo, grid_lut28) | (GRID_DARKEN(hi, grid_lut24) << 16);
+      }
     }
   }
-  else
+
+  if (option_grid == 1) return;
+
+  // --- Even rows, odd columns only ---
+  for (u32 dy = 0; dy < SCALE2X_H; dy += 2)
   {
-    // Full: odd rows — two passes (no inner conditional)
-    for (u32 dy = 1; dy < SCALE2X_H; dy += 2)
+    u32 *row32 = (u32 *)(scale2x_buffer + dy * SCALE2X_LINE_SIZE);
+
+    if (dy + 2 < SCALE2X_H)
+      __builtin_prefetch((u8 *)row32 + 2 * SCALE2X_LINE_SIZE * sizeof(u16), 0, 1);
+
+    for (u32 dx = 0; dx < SCALE2X_W / 2; dx++)
     {
-      u16 *row = scale2x_buffer + dy * SCALE2X_LINE_SIZE;
-      for (u32 dx = 0; dx < SCALE2X_W; dx += 2)
-        row[dx] = grid_px_lut28[row[dx] & 0x7FFF];
-      for (u32 dx = 1; dx < SCALE2X_W; dx += 2)
-        row[dx] = grid_px_lut24[row[dx] & 0x7FFF];
-    }
-    // Even rows — only odd columns (right edge of each GBA pixel's 2x block)
-    for (u32 dy = 0; dy < SCALE2X_H; dy += 2)
-    {
-      u16 *row = scale2x_buffer + dy * SCALE2X_LINE_SIZE;
-      for (u32 dx = 1; dx < SCALE2X_W; dx += 2)
-        row[dx] = grid_px_lut28[row[dx] & 0x7FFF];
+      u32 pair = row32[dx];
+      u32 hi = (pair >> 16) & 0x7FFF;
+      row32[dx] = (pair & 0x0000FFFFu) | (GRID_DARKEN(hi, grid_lut28) << 16);
     }
   }
 }
@@ -3934,7 +3955,6 @@ void init_video(int devkit_version)
   
   // Initialize color correction lookup tables for performance
   init_color_correction_luts();
-  init_grid_pixel_luts();
   
   // Initialize layer merging cache
   init_layer_cache();
@@ -4120,31 +4140,65 @@ static void apply_sharpness(void)
 // Each GBA pixel becomes an exact 2×2 block — no smoothing, no rounding.
 // GPU then applies bilinear only for the sub-integer vertical step (320→272),
 // which is a much smaller interpolation than going directly from 160→272.
+// Sharp Bilinear pixel doubler: 240×160 → 480×320.
+// Grid filter is integrated here so the scale2x_buffer is only traversed once.
+//
+// Grid pixel layout in the 2×2 output block for each source pixel p:
+//   dst_t[sx*2]   dst_t[sx*2+1]     (even dst row = sy*2)
+//   dst_b[sx*2]   dst_b[sx*2+1]     (odd  dst row = sy*2+1)
+//
+//   grid=0:  p      p       p      p
+//   grid=1:  p      p       p30    p30   (subtle: odd row darkened)
+//   grid=2:  p      p28     p28    p24   (full:   odd col + odd row borders)
+//
+// Each u32 store covers one (even, odd) column pair — lo=even col, hi=odd col.
 static void apply_pixel_double(void)
 {
-  // Only process rows that will actually be visible on screen (optimization 1).
-  // pixel_double_rows = ceil(visible_dh / 2) ≤ GBA_SCREEN_HEIGHT, set per display mode.
+  extern u32 option_grid;
+
   for (u32 sy = 0; sy < pixel_double_rows; sy++)
   {
-    u16 *src   = screen_texture + sy * GBA_LINE_SIZE;
-    u16 *dst_t = scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE;
-    u16 *dst_b = scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE;
+    u16 *src     = screen_texture + sy * GBA_LINE_SIZE;
+    u32 *dst_t32 = (u32 *)(scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE);
+    u32 *dst_b32 = (u32 *)(scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE);
 
-    // Optimization 2: prefetch the next source row into D-cache while we process this one.
+    // Prefetch next source row while processing this one
     if (sy + 1 < pixel_double_rows)
       __builtin_prefetch(screen_texture + (sy + 1) * GBA_LINE_SIZE, 0, 1);
 
-    // Optimization 3a: write dst_t using u32 pairs (2 pixels per store).
-    for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
+    if (option_grid == 0)
     {
-      u32 p2 = (u32)src[sx];
-      p2 = (p2 << 16) | p2;
-      ((u32 *)dst_t)[sx] = p2;
+      // No grid: u32 pair = (p | p<<16), then memcpy for dst_b
+      for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
+      {
+        u32 p = (u32)src[sx];
+        dst_t32[sx] = (p << 16) | p;
+      }
+      memcpy(dst_b32, dst_t32, SCALE2X_W * sizeof(u16));
     }
-
-    // Optimization 3b: dst_b is identical to dst_t — use memcpy so the PSP SDK
-    // can transfer with the widest available bus width rather than recomputing.
-    memcpy(dst_b, dst_t, SCALE2X_W * sizeof(u16));
+    else if (option_grid == 1)
+    {
+      // Subtle: dst_t = normal pair, dst_b = lut30 pair (odd row darkened)
+      for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
+      {
+        u32 p  = (u32)(src[sx] & 0x7FFF);
+        u32 pd = GRID_DARKEN(p, grid_lut30);
+        dst_t32[sx] = (p  | 0x8000u) | ((p  | 0x8000u) << 16);
+        dst_b32[sx] = pd             | (pd              << 16);
+      }
+    }
+    else // option_grid == 2
+    {
+      // Full: dst_t = (p, p28), dst_b = (p28, p24) — grid built in a single pass
+      for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
+      {
+        u32 p   = (u32)(src[sx] & 0x7FFF);
+        u32 p28 = GRID_DARKEN(p, grid_lut28);
+        u32 p24 = GRID_DARKEN(p, grid_lut24);
+        dst_t32[sx] = (p | 0x8000u) | (p28 << 16);  // even col=normal, odd col=lut28
+        dst_b32[sx] = p28           | (p24 << 16);  // even col=lut28,  odd col=lut24
+      }
+    }
   }
 }
 
@@ -4282,12 +4336,16 @@ static void bitbilt_gu(void)
     // Scale2x uses GU_NEAREST (edge-aware, no blur).
     // Sharp Bilinear uses GU_LINEAR (pixel-perfect 2× blocks + bilinear for 320→272 step).
     if (option_screen_filter == FILTER_SCALE2X)
+    {
       apply_scale2x();
+      // Grid for Scale2x: post-process pass (scale2x outputs varied pixels, can't integrate)
+      apply_grid_filter_2x();
+    }
     else
+    {
+      // Sharp Bilinear: grid is integrated inside apply_pixel_double() — no extra pass needed
       apply_pixel_double();
-
-    // Grid applied AFTER upscaling so borders are 1px wide (authentic LCD look)
-    apply_grid_filter_2x();
+    }
 
     // Flush only the rows we actually wrote (pixel_double_rows × 2 doubled rows).
     sceKernelDcacheWritebackRange(scale2x_buffer,
