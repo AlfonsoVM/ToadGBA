@@ -198,6 +198,7 @@ const u8 ALIGN_DATA active_layers[8] =
 void set_gba_resolution(void);
 static void generate_display_list(float mag);
 static void generate_display_list_stretch(void);
+static void generate_display_list_scale2x(void);
 static void bitbilt_gu(void);
 static void bitbilt_sw(void);
 
