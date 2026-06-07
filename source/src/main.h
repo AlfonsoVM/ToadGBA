@@ -31,6 +31,7 @@
 // video filter type
 #define FILTER_NEAREST  0
 #define FILTER_BILINEAR 1
+#define FILTER_SCALE2X  2
 
 // color correction modes
 #define COLOR_CORRECTION_OFF      0

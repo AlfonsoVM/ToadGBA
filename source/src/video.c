@@ -68,8 +68,17 @@ s32 ALIGN_DATA affine_reference_y[2];
 
 static u32 ALIGN_PSPDATA display_list[512];
 static u32 ALIGN_PSPDATA display_list_0[256];
+static u32 ALIGN_PSPDATA display_list_s2x[256]; // Scale2x call list
 
 static u16 *screen_texture = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2));
+
+// Scale2x output buffer in VRAM, right after screen_texture (256*256*2 bytes).
+// Stride = 512 so GU can treat it as a 512×512 power-of-2 texture.
+// Content: 480×320 pixels (GBA 240×160 scaled ×2 in both axes).
+#define SCALE2X_LINE_SIZE  512
+#define SCALE2X_W          (GBA_SCREEN_WIDTH  * 2)   // 480
+#define SCALE2X_H          (GBA_SCREEN_HEIGHT * 2)   // 320
+static u16 *scale2x_buffer = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2) + (256 * 256 * 2));
 
 // Grid filter — simulates GBA LCD pixel grid
 // 0=off, 1=subtle (horizontal lines only), 2=full grid (GBA-accurate)
@@ -3780,6 +3789,7 @@ void init_video(int devkit_version)
   sceGuDisplay(GU_TRUE);
 
   generate_display_list(1.5);
+  generate_display_list_scale2x();
   update_screen = bitbilt_gu;
 
   load_volume_icon(devkit_version);
@@ -3915,7 +3925,7 @@ static void apply_sharpness(void)
   // Weights for center pixel (neighbours weight = center - 256)
   static const u16 center_w[4] = { 256, 288, 384, 512 };
   u32 cw = center_w[option_sharpness];  // center weight
-  u32 nw = cw - 256;                    // neighbour weight (subtract)
+  u32 nw = (cw - 256) >> 2;            // neighbour weight per pixel (4 neighbours, sum must equal 256)
 
   // Temporary line buffers — only need prev and current
   static u16 prev_line[256];
@@ -3964,6 +3974,96 @@ static void apply_sharpness(void)
   }
 }
 
+// AdvMAME2x Scale2x: 240×160 → 480×320 into scale2x_buffer.
+// For each source pixel E with neighbours B(above) D(left) F(right) H(below):
+//   P1(top-left)     = (D==B && D!=H && B!=F) ? D : E
+//   P2(top-right)    = (B==F && B!=D && F!=H) ? F : E
+//   P3(bottom-left)  = (D==H && D!=B && H!=F) ? D : E
+//   P4(bottom-right) = (H==F && D!=H && B!=F) ? F : E
+static void apply_scale2x(void)
+{
+  for (u32 sy = 0; sy < GBA_SCREEN_HEIGHT; sy++)
+  {
+    u16 *src   = screen_texture + sy                             * GBA_LINE_SIZE;
+    u16 *src_u = screen_texture + (sy > 0 ? sy - 1 : 0)        * GBA_LINE_SIZE;
+    u16 *src_d = screen_texture + (sy < GBA_SCREEN_HEIGHT - 1
+                                    ? sy + 1 : GBA_SCREEN_HEIGHT - 1) * GBA_LINE_SIZE;
+
+    u16 *dst_t = scale2x_buffer + (sy * 2)       * SCALE2X_LINE_SIZE;
+    u16 *dst_b = scale2x_buffer + (sy * 2 + 1)   * SCALE2X_LINE_SIZE;
+
+    for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
+    {
+      u16 B = src_u[sx];
+      u16 D = sx > 0                  ? src[sx - 1] : src[sx];
+      u16 E = src[sx];
+      u16 F = sx < GBA_SCREEN_WIDTH-1 ? src[sx + 1] : src[sx];
+      u16 H = src_d[sx];
+
+      dst_t[sx*2]   = (D == B && D != H && B != F) ? D : E;
+      dst_t[sx*2+1] = (B == F && B != D && F != H) ? F : E;
+      dst_b[sx*2]   = (D == H && D != B && H != F) ? D : E;
+      dst_b[sx*2+1] = (H == F && D != H && B != F) ? F : E;
+    }
+  }
+}
+
+// Display list for Scale2x: maps scale2x_buffer (480×320) → PSP screen (480×272).
+// GU compresses 320→272 rows with nearest-neighbor (only ~1.18× vertical, near 1:1).
+// Must be called after GU is fully initialised (from init_video).
+static void generate_display_list_scale2x(void)
+{
+  u32 i;
+  Vertex *vertices, *vertices_tmp;
+
+  sceGuStart(GU_CALL, display_list_s2x);
+
+  sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
+
+  // GU texture is set dynamically in bitbilt_gu when Scale2x is active.
+  // The vertices map u=0..480, v=0..320 → x=0..480, y=0..272.
+  vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
+
+  if (vertices != NULL)
+  {
+    memset(vertices, 0, VERTEX_COUNT * sizeof(Vertex));
+    vertices_tmp = vertices;
+
+    for (i = 0; (i + SLICE) < GBA_SCREEN_WIDTH; i += SLICE)
+    {
+      vertices_tmp[0].u = i * 2;
+      vertices_tmp[0].v = 0;
+      vertices_tmp[0].x = i * 2;
+      vertices_tmp[0].y = 0;
+
+      vertices_tmp[1].u = (i + SLICE) * 2;
+      vertices_tmp[1].v = SCALE2X_H;
+      vertices_tmp[1].x = (i + SLICE) * 2;
+      vertices_tmp[1].y = PSP_SCREEN_HEIGHT;
+
+      vertices_tmp += 2;
+    }
+
+    if (i < GBA_SCREEN_WIDTH)
+    {
+      vertices_tmp[0].u = i * 2;
+      vertices_tmp[0].v = 0;
+      vertices_tmp[0].x = i * 2;
+      vertices_tmp[0].y = 0;
+
+      vertices_tmp[1].u = SCALE2X_W;
+      vertices_tmp[1].v = SCALE2X_H;
+      vertices_tmp[1].x = PSP_SCREEN_WIDTH;
+      vertices_tmp[1].y = PSP_SCREEN_HEIGHT;
+    }
+
+    sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D,
+                   VERTEX_COUNT, 0, vertices);
+  }
+
+  sceGuFinish();
+}
+
 static void bitbilt_gu(void)
 {
   // Apply sharpness filter before handing texture to GPU
@@ -3972,15 +4072,38 @@ static void bitbilt_gu(void)
   // Apply LCD grid filter (after sharpness so it doesn't get sharpened away)
   apply_grid_filter();
 
-  sceKernelDcacheWritebackAll();
+  if (option_screen_filter == FILTER_SCALE2X)
+  {
+    apply_scale2x();
+    sceKernelDcacheWritebackAll();
 
-  sceGuStart(GU_DIRECT, display_list);
+    sceGuStart(GU_DIRECT, display_list);
 
-  sceGuCallList(display_list_0);
+    // Point GU at the Scale2x buffer (512×512 texture, 480×320 used)
+    sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
+    sceGuTexFlush();
+    sceGuCallList(display_list_s2x);
 
-  sceGuFinish();
-  sceGuSync(0, GU_SYNC_FINISH);
-  
+    sceGuFinish();
+    sceGuSync(0, GU_SYNC_FINISH);
+
+    // Restore texture to screen_texture for next frame
+    sceGuStart(GU_DIRECT, display_list);
+    sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
+    sceGuTexFlush();
+    sceGuFinish();
+    sceGuSync(0, GU_SYNC_FINISH);
+  }
+  else
+  {
+    sceKernelDcacheWritebackAll();
+
+    sceGuStart(GU_DIRECT, display_list);
+    sceGuCallList(display_list_0);
+    sceGuFinish();
+    sceGuSync(0, GU_SYNC_FINISH);
+  }
+
   // Apply overlay AFTER GPU finishes to avoid conflicts
   render_overlay();
 }
@@ -4174,7 +4297,9 @@ void video_resolution_small(void)
   sceGuClearColor(0);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
-  sceGuTexFilter(option_screen_filter, option_screen_filter);
+  // Scale2x does its own nearest-neighbor via CPU; clamp to valid GU values (0 or 1)
+  u32 gu_filter = (option_screen_filter == FILTER_SCALE2X) ? GU_NEAREST : option_screen_filter;
+  sceGuTexFilter(gu_filter, gu_filter);
 
   sceGuFinish();
   sceGuSync(0, GU_SYNC_FINISH);

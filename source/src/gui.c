@@ -1439,6 +1439,13 @@ u32 menu(void)
     MSG[MSG_ON]
   };
 
+  const char *filter_options[] =
+  {
+    MSG[MSG_OFF],
+    MSG[MSG_ON],
+    "Scale2x"
+  };
+
   const char *scale_options[] =
   {
     MSG[MSG_SCN_SCALED_NONE],
@@ -2185,7 +2192,7 @@ u32 menu(void)
 
     {NULL, NULL, NULL, "Aspect Ratio    : %s", (void*)aspect_ratio_options, &option_aspect_ratio, 4, 0, 2, STRING_SELECTION_OPTION},
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], on_off_options, &option_screen_filter, 2, MSG_OPTION_MENU_HELP_2, 3),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], filter_options, &option_screen_filter, 3, MSG_OPTION_MENU_HELP_2, 3),
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_SHOW_FPS], on_off_options, &psp_fps_debug, 2, MSG_OPTION_MENU_HELP_SHOW_FPS, 4),
 
@@ -3038,7 +3045,7 @@ s32 load_game_config_file(void)
 
       option_screen_scale   = file_options[0] % 4;
       option_screen_mag     = file_options[1] % 201;
-      option_screen_filter  = file_options[2] % 2;
+      option_screen_filter  = file_options[2] % 3;
       option_frameskip_type  = file_options[3] % 3;
       option_frameskip_value = file_options[4];
       option_clock_speed     = file_options[5] % 4;
@@ -3102,7 +3109,7 @@ s32 load_config_file(void)
 
       option_screen_scale   = file_options[0] % 4;
       option_screen_mag     = file_options[1] % 201;
-      option_screen_filter  = file_options[2] % 2;
+      option_screen_filter  = file_options[2] % 3;
       psp_fps_debug       = file_options[3] % 2;
       option_frameskip_type  = file_options[4] % 3;
       option_frameskip_value = file_options[5];
