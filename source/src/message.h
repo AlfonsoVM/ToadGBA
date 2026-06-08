@@ -325,6 +325,6 @@ enum MESSAGE_ITEM
   MSG_END
 };
 
-extern const char *message[4][MSG_END];
+extern const char *message[2][MSG_END];
 
 #endif /* MESSAGE_H */

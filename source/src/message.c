@@ -21,7 +21,7 @@
 #include "common.h"
 
 
-const char *message[4][MSG_END] =
+const char *message[2][MSG_END] =
 {
   {
     //MSG_TURBO
