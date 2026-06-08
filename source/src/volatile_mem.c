@@ -25,11 +25,9 @@ int volatile_mem_init(void)
     if (result == 0) {
         // Success! Lock power to prevent suspension while using volatile memory
         scePowerLock(0);
-        printf("Successfully unlocked volatile mem: %d KB\n", size / 1024);
         g_volatile_mem_available = 1;
         return 1;
     } else {
-        printf("Failed to unlock volatile mem: %08x\n", result);
         g_volatile_mem_available = 0;
         return 0;
     }

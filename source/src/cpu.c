@@ -3398,7 +3398,7 @@ static u8 *translate_block_##type(u32 pc)                                     \
       return NULL; /* internal error; satisfies the compiler */               \
   }                                                                           \
                                                                               \
-  /* Debug: Check cache pointers before use */                               \
+  /* Safety: caches must be initialized before JIT compilation */            \
   if (!readonly_code_cache || !writable_code_cache) {                        \
     printf("translate_block: ERROR - caches not initialized!\n");            \
     printf("  readonly_code_cache = %p\n", readonly_code_cache);             \
@@ -3418,10 +3418,6 @@ static u8 *translate_block_##type(u32 pc)                                     \
       break;                                                                  \
   }                                                                           \
                                                                               \
-  /* Debug: Print cache info */                                               \
-  printf("translate_block_%s: pc=0x%08lX region=%d\n", #type, pc, translation_region); \
-  printf("  translation_ptr = %p\n", translation_ptr);                       \
-  printf("  cache_limit = %p\n", translation_cache_limit);                   \
                                                                               \
   update_metadata_area_start(pc);                                             \
                                                                               \
@@ -4106,22 +4102,13 @@ static void init_translation_caches(void)
   if (caches_initialized)
     return;
     
-  // Debug logging
-  printf("init_translation_caches: Starting initialization\n");
-  
   // Use static translation caches (gpSP Kai approach) for better performance
   readonly_cache_size = READONLY_CODE_CACHE_SIZE;
   writable_cache_size = WRITABLE_CODE_CACHE_SIZE;
-  
-  printf("init_translation_caches: Using static caches - readonly=%d KB, writable=%d KB\n", 
-         (int)(readonly_cache_size / 1024), (int)(writable_cache_size / 1024));
-  
+
   // Point to static caches
   readonly_code_cache = rom_translation_cache;
   writable_code_cache = ram_translation_cache;
-  
-  printf("init_translation_caches: readonly_code_cache at %p\n", readonly_code_cache);
-  printf("init_translation_caches: writable_code_cache at %p\n", writable_code_cache);
   
   // Initialize cache pointers
   readonly_next_code = readonly_code_cache;
@@ -4142,13 +4129,10 @@ static void init_translation_caches(void)
   (void)dummy; // Suppress unused variable warning
   
   caches_initialized = 1;
-  printf("init_translation_caches: Initialization complete\n");
 }
 
 void init_cpu(void)
 {
-  printf("init_cpu: Starting CPU initialization\n");
-  
   // Initialize translation caches (with volatile memory if available)
   init_translation_caches();
   

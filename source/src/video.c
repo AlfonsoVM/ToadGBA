@@ -3734,8 +3734,6 @@ void init_color_correction_luts(void)
   if (!lcd_dim_lut)      lcd_dim_lut      = (u16*)safe_malloc(32768 * sizeof(u16));
   if (!combined_lut)     combined_lut     = (u16*)safe_malloc(32768 * sizeof(u16));
     
-  printf("Initializing color correction lookup tables...\n");
-  
   // --- GPSP color correction ---
   for (int rgb555 = 0; rgb555 < 32768; rgb555++)
   {
@@ -3819,7 +3817,6 @@ void init_color_correction_luts(void)
   }
 
   color_luts_initialized = 1;
-  printf("Color correction LUTs initialized (320KB)\n");
 
   // Build initial combined LUT (color off + default brightness)
   rebuild_combined_lut();
