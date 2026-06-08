@@ -51,10 +51,10 @@
 #define CONTRAST_DEFAULT 4
 #define CONTRAST_MAX     8
 
-// saturation adjustment (0=grayscale, 4=normal, 8=vivid)
+// saturation adjustment (0=grayscale, 8=normal, 16=vivid)
 #define SATURATION_MIN     0
-#define SATURATION_DEFAULT 4
-#define SATURATION_MAX     8
+#define SATURATION_DEFAULT 8
+#define SATURATION_MAX     16
 
 // sharpness (0=off, 1=subtle, 2=medium, 3=strong)
 #define SHARPNESS_MIN     0
@@ -75,6 +75,7 @@
 #define COLORTEMP_MIN     0
 #define COLORTEMP_DEFAULT 4
 #define COLORTEMP_MAX     8
+#define COLORTEMP_STEP    15  // per-step shift in 8-bit space (±60 max ≈ ±24% range)
 
 // frameskip type
 #define FRAMESKIP_AUTO   0
