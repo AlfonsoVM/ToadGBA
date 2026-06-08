@@ -268,7 +268,7 @@
     "Left/Right: saturation (8=normal)  O:Back",
 
     // MSG_HELP_VIDEO_COLORTEMP
-    "Left/Right: color temp (0=warm, 8=cool)  O:Back",
+    "Left/Right: color temp (0=warm, 16=cool)  O:Back",
 
     // MSG_HELP_VIDEO_SHARPNESS
     "Left/Right: sharpness (0=off)  O:Back",

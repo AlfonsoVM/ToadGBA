@@ -71,11 +71,11 @@
 #define COLOR_RGB_DEFAULT 4
 #define COLOR_RGB_MAX     8
 
-// color temperature (0=warm/amber, 4=neutral, 8=cool/blue)
+// color temperature (0=warm/amber, 8=neutral, 16=cool/blue)
 #define COLORTEMP_MIN     0
-#define COLORTEMP_DEFAULT 4
-#define COLORTEMP_MAX     8
-#define COLORTEMP_STEP    15  // per-step shift in 8-bit space (±60 max ≈ ±24% range)
+#define COLORTEMP_DEFAULT 8
+#define COLORTEMP_MAX     16
+#define COLORTEMP_STEP    8   // per-step shift in 8-bit space (±64 max ≈ ±25% range)
 
 // frameskip type
 #define FRAMESKIP_AUTO   0

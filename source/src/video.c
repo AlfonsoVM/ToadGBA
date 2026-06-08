@@ -3793,10 +3793,10 @@ void rebuild_combined_lut(void)
   // factor 0..256: 0=full grayscale, 256=neutral, 512=double sat
   u32 sat_factor = option_saturation * 32; // 0->0, 8->256, 16->512
 
-  // Color temperature: 4->neutral, 0->warm (boost R, cut B), 8->cool (cut R, boost B)
-  // Each step = COLORTEMP_STEP units in 8-bit space; max shift ±(4 * COLORTEMP_STEP).
-  s32 temp_r = (s32)(option_colortemp - 4) * (-COLORTEMP_STEP); // warm=+R, cool=-R
-  s32 temp_b = (s32)(option_colortemp - 4) * ( COLORTEMP_STEP); // warm=-B, cool=+B
+  // Color temperature: 8->neutral, 0->warm (boost R, cut B), 16->cool (cut R, boost B)
+  // Each step = COLORTEMP_STEP units in 8-bit space; max shift ±(8 * COLORTEMP_STEP).
+  s32 temp_r = (s32)(option_colortemp - 8) * (-COLORTEMP_STEP); // warm=+R, cool=-R
+  s32 temp_b = (s32)(option_colortemp - 8) * ( COLORTEMP_STEP); // warm=-B, cool=+B
 
   u8 all_neutral = (option_brightness == BRIGHTNESS_DEFAULT &&
                     option_contrast   == CONTRAST_DEFAULT   &&
