@@ -199,22 +199,22 @@
     "Screenshots     :",
 
     // MSG_HELP_SUBMENU_DIRECTORIES
-    "Configure where ToadGBA looks for ROMs, saves and other files",
+    "File path settings for ROMs, saves, overlays",
 
     // MSG_HELP_DIR_ROMS
-    "O:Browse for ROMs folder",
+    "X:Browse for ROMs folder  O:Back",
 
     // MSG_HELP_DIR_SAVE
-    "O:Browse for saves folder",
+    "X:Browse for saves folder  O:Back",
 
     // MSG_HELP_DIR_STATE
-    "O:Browse for savestates folder",
+    "X:Browse for savestates  O:Back",
 
     // MSG_HELP_DIR_CHEAT
-    "O:Browse for cheats folder",
+    "X:Browse for cheats folder  O:Back",
 
     // MSG_HELP_DIR_SNAP
-    "O:Browse for screenshots folder",
+    "X:Browse for screenshots  O:Back",
 
     // MSG_VIDEO_BRIGHTNESS
     "Brightness      : %d",
@@ -259,79 +259,79 @@
     "Language, BIOS and system settings",
 
     // MSG_HELP_VIDEO_BRIGHTNESS
-    "Left/Right: adjust screen brightness (4=normal)",
+    "Left/Right: brightness (4=normal)  O:Back",
 
     // MSG_HELP_VIDEO_CONTRAST
-    "Left/Right: adjust contrast (4=normal, 0=flat, 8=punchy)",
+    "Left/Right: contrast (4=normal)  O:Back",
 
     // MSG_HELP_VIDEO_SATURATION
-    "Left/Right: adjust saturation (4=normal, 0=grayscale, 8=vivid)",
+    "Left/Right: saturation (8=normal)  O:Back",
 
     // MSG_HELP_VIDEO_COLORTEMP
-    "Left/Right: color temperature (0=warm/amber, 4=neutral, 8=cool/blue)",
+    "Left/Right: color temp (0=warm, 8=cool)  O:Back",
 
     // MSG_HELP_VIDEO_SHARPNESS
-    "Left/Right: sharpness (Off/Subtle/Medium/Strong). Compensates bilinear blur",
+    "Left/Right: sharpness (0=off)  O:Back",
 
     // MSG_HELP_VIDEO_GRID
-    "Left/Right: LCD grid (Off / Subtle rows / Full GBA pixel grid)",
+    "Left/Right: LCD grid overlay  O:Back",
 
     // MSG_HELP_VIDEO_COLOR_RGB
-    "Left/Right: selective color boost (4=neutral, 0-3=reduce, 5-8=boost dominant hue)",
+    "Left/Right: hue channel boost (4=neutral)  O:Back",
 
     // MSG_OPTION_MENU_HELP_0
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: display mode  O:Back",
 
     // MSG_OPTION_MENU_HELP_1
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: screen magnification  O:Back",
 
     // MSG_OPTION_MENU_HELP_2
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: screen filter  O:Back",
 
     // MSG_OPTION_MENU_HELP_SHOW_FPS
-    "Left/Right:Select   Description:Show FPS toggle",
+    "Left/Right: FPS display  O:Back",
 
     // MSG_OPTION_MENU_HELP_OPTIMIZATIONS
-    "O     :Enable performance optimizations",
+    "Left/Right: toggle  O:Back",
 
     // MSG_OPTION_MENU_HELP_COLOR_CORRECTION
-    "Left/Right:Select   GBA color correction",
+    "Left/Right: GBA color correction  O:Back",
 
     // MSG_OPTION_MENU_HELP_BUTTON_MAPPING
-    "Left/Right:Select   X/O or O/X button mapping",
+    "Left/Right: X/O or O/X button layout  O:Back",
 
     // MSG_OPTION_MENU_HELP_3
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: frameskip type  O:Back",
 
     // MSG_OPTION_MENU_HELP_4
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: frameskip value  O:Back",
 
     // MSG_OPTION_MENU_HELP_5
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: CPU clock speed  O:Back",
 
     // MSG_OPTION_MENU_HELP_6
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: sound volume  O:Back",
 
     // MSG_OPTION_MENU_HELP_7
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: stack optimize  O:Back",
 
     // MSG_OPTION_MENU_HELP_8
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: boot from BIOS  O:Back",
 
     // MSG_OPTION_MENU_HELP_9
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: update backup  O:Back",
 
     // MSG_OPTION_MENU_HELP_10
-    "Left/Right:Select   Description:Settings",
+    "Left/Right: menu language  O:Back",
 
     // MSG_OPTION_MENU_HELP_DEFAULT
     "X:Restore default settings",
 
     // MSG_OPTION_MENU_HELP_11
-    "X:Main menu",
+    "X:Back",
 
     // MSG_OPTION_MENU_HELP_12
-    "O     :Select performance vs accuracy tradeoff level",
+    "Left/Right: accuracy vs performance  O:Back",
 
     // MSG_STATE_MENU_DATE_FMT_0
     "%4d/%2d/%2d %-3s %2d:%02d:%02d",
@@ -361,13 +361,13 @@
     "Back",
 
     // MSG_STATE_MENU_HELP_0
-    "○:Execute  " FONT_CURSOR_LEFT_GBK FONT_CURSOR_RIGHT_GBK ":Select",
+    "X:Execute  Left/Right:Select",
 
     // MSG_STATE_MENU_HELP_1
-    "○:File browser",
+    "X:File browser",
 
     // MSG_STATE_MENU_HELP_2
-    "○:Main menu",
+    "X:Back",
 
     // MSG_PAD_MENU_TITLE
     "Gamepad config",
@@ -412,10 +412,10 @@
     "Back",
 
     // MSG_PAD_MENU_HELP_0
-    FONT_CURSOR_LEFT_GBK FONT_CURSOR_RIGHT_GBK ":Select",
+    "Left/Right:Select",
 
     // MSG_PAD_MENU_HELP_1
-    "○:Main menu",
+    "X:Back",
 
     //PADの設定 コンフィグ
 
@@ -510,7 +510,7 @@
     "Left/Right:Select",
 
     // MSG_A_PAD_MENU_HELP_2
-    "○:Main menu",
+    "X:Back",
 
 	//MSG_CHEAT_MENU_TITLE,
 	"Cheats options",
@@ -522,7 +522,7 @@
 	"%%s %2d: %s",
 
 	//MSG_CHEAT_MENU_1,
-	"Load Cheat File  " FONT_L_TRIGGER_GBK,
+	"Load Cheat File  (L)",
 
 	//MSG_CHEAT_MENU_2,
 	"Back",
@@ -531,16 +531,16 @@
 	"cheat page: %d",
 
 	//MSG_CHEAT_MENU_HELP_0,
-	FONT_CURSOR_LEFT_GBK FONT_CURSOR_RIGHT_GBK ":Activate/deactivate",
+	"Left/Right:Activate/deactivate",
 
 	//MSG_CHEAT_MENU_HELP_1,
-	"○:Cheat file browser  "FONT_L_TRIGGER_GBK ":Shortcut key",
+	"X:Cheat browser  L:Shortcut key",
 
 	//MSG_CHEAT_MENU_HELP_2,
-	"○:Main menu",
+	"X:Back",
 
 	//MSG_CHEAT_MENU_HELP_3,
-	FONT_CURSOR_LEFT_GBK FONT_CURSOR_RIGHT_GBK ":Change page",
+	"Left/Right:Change page",
 
     //MSG_OVERLAY_MENU_TITLE
     "Overlay Selection",
@@ -561,19 +561,19 @@
     "Back to main menu",
 
     //MSG_OVERLAY_MENU_HELP_0
-    FONT_CURSOR_LEFT_GBK FONT_CURSOR_RIGHT_GBK ":Select overlay file",
+    "Left/Right:Select overlay file",
 
     //MSG_OVERLAY_MENU_HELP_1
-    FONT_CURSOR_LEFT_GBK FONT_CURSOR_RIGHT_GBK ":Toggle overlay on/off",
+    "Left/Right:Toggle on/off",
 
     //MSG_OVERLAY_MENU_HELP_2
-    FONT_CURSOR_LEFT_GBK FONT_CURSOR_RIGHT_GBK ":Adjust X position (0-240)",
+    "Left/Right:Adjust X position (0-240)",
 
     //MSG_OVERLAY_MENU_HELP_3
-    FONT_CURSOR_LEFT_GBK FONT_CURSOR_RIGHT_GBK ":Adjust Y position (0-112)",
+    "Left/Right:Adjust Y position (0-112)",
 
     //MSG_OVERLAY_MENU_HELP_4
-    "X:Return to main menu",
+    "X:Back to main menu",
 
     // MSG_NON_LOAD_GAME
     "Game is not loaded",
