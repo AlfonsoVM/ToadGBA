@@ -2384,7 +2384,7 @@ u32 menu(void)
     ACTION_SUBMENU_OPTION(NULL, NULL, MSG[MSG_STATE_MENU_2], MSG_STATE_MENU_HELP_2, 13)
   };
 
-  MAKE_MENU(savestate, NULL, NULL);
+  MAKE_MENU(savestate, submenu_savestate, NULL);
 
   MenuOptionType gamepad_config_options[] =
   {

@@ -361,7 +361,7 @@
     "Back",
 
     // MSG_STATE_MENU_HELP_0
-    "X:Execute  Left/Right:Select",
+    "Left/Right:Load<>Save  X:Execute",
 
     // MSG_STATE_MENU_HELP_1
     "X:File browser",
