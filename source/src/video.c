@@ -4762,7 +4762,6 @@ void clear_screen(u32 color)
   // Used by GUI Menus
   
   // When screen is cleared, overlay needs to be re-applied
-  extern int overlay_needs_update;
   overlay_needs_update = 1;
 
   // Hardware Clear - results in a blank screen in PPSSPP emulator
@@ -5400,9 +5399,6 @@ static int cache_valid = 0;
 // Function declaration
 static void build_overlay_cache(void);
 
-extern char overlay_names[][64];
-extern char dir_overlay[];
-
 // Load overlay from file (simple raw binary format for now)
 void load_overlay(const char *filename) 
 {
@@ -5529,9 +5525,6 @@ void pause_overlay_for_saveload(void) {
   if (!overlay_loaded) return;
   
   // Remember which overlay was loaded so we can restore it
-  extern char overlay_names[][64];
-  extern u32 option_overlay_selected;
-  
   if (temp_overlay_filename) {
     free(temp_overlay_filename);
     temp_overlay_filename = NULL;
@@ -5699,7 +5692,6 @@ void build_overlay_cache(void) {
   
   // Report quality mode if degraded
   if (current_quality != OVERLAY_QUALITY_FULL) {
-    extern void error_msg(const char *text, u8 confirm);
     char msg[80];
     sprintf(msg, "Overlay: %d pixels, using %s quality", 
             total_overlay_pixels,

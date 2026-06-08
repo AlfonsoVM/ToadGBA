@@ -854,16 +854,10 @@ int user_main(int argc, char *argv[])
   init_overlays_at_boot();
   
   // Initialize recent games tracking
-  extern void load_recent_games(void);
   load_recent_games();
-  
+
   // Load initial overlay if one is selected
   if (option_overlay_selected > 0 && option_overlay_selected < 10) {
-    extern void load_overlay(const char *filename);
-    extern char overlay_names[][64];
-    extern int overlay_needs_update;
-    
-    
     load_overlay(overlay_names[option_overlay_selected]);
     overlay_needs_update = 1; // Ensure overlay gets rendered
   }

@@ -3722,16 +3722,10 @@ void load_state(char *savestate_filename)
   sprintf(savestate_path, "%s%s", dir_state, savestate_filename);
 
   // Temporarily free overlay memory to make room for save state operations
-  extern void free_overlay_memory(void);
-  extern void load_overlay(const char *filename);
-  extern u32 option_overlay_enabled;
-  extern u32 option_overlay_selected;
-  extern char overlay_names[10][64];
   int need_restore_overlay = 0;
   char saved_overlay_name[64] = {0};
-  
+
   // Free overlay memory if any overlay is loaded (not just if enabled)
-  extern int overlay_loaded;
   if (overlay_loaded || (option_overlay_enabled && option_overlay_selected > 0)) {
     if (option_overlay_selected > 0 && option_overlay_selected < 10) {
       strcpy(saved_overlay_name, overlay_names[option_overlay_selected]);
@@ -3793,16 +3787,10 @@ void save_state(char *savestate_filename, u16 *screen_capture)
   sprintf(savestate_path, "%s%s", dir_state, savestate_filename);
 
   // Temporarily free overlay memory to make room for save state buffer
-  extern void free_overlay_memory(void);
-  extern void load_overlay(const char *filename);
-  extern u32 option_overlay_enabled;
-  extern u32 option_overlay_selected;
-  extern char overlay_names[10][64];
   int need_restore_overlay = 0;
   char saved_overlay_name[64] = {0};
-  
+
   // Free overlay memory if any overlay is loaded (not just if enabled)
-  extern int overlay_loaded;
   if (overlay_loaded || (option_overlay_enabled && option_overlay_selected > 0)) {
     if (option_overlay_selected > 0 && option_overlay_selected < 10) {
       strcpy(saved_overlay_name, overlay_names[option_overlay_selected]);
@@ -3950,7 +3938,6 @@ void save_auto_resume_state(void)
   char savestate_ext[16];
   
   // Only save if auto save/load is enabled
-  extern u32 option_auto_save_state;
   if (option_auto_save_state == 0) {
     return;
   }

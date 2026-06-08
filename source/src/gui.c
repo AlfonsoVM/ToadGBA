@@ -264,7 +264,6 @@ char dir_overlay[MAX_PATH];//overlay
 u32 menu_cheat_page = 0;
 
 // Overlay variables
-#define MAX_OVERLAYS 10
 char overlay_names[MAX_OVERLAYS][64] = {
   "None", "None", "None", "None", "None", 
   "None", "None", "None", "None", "None"
@@ -411,8 +410,6 @@ void scan_overlay_files(void)
 // Called when overlay selection changes
 static void overlay_changed(void)
 {
-  extern int overlay_needs_update;
-  
   /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "overlay_changed: selected=%d, num_overlays=%d, name='%s'\n", 
@@ -422,7 +419,6 @@ static void overlay_changed(void)
   }*/
   
   if (option_overlay_selected < num_overlays) {
-    extern int overlay_needs_update;
     load_overlay(overlay_names[option_overlay_selected]);
     overlay_needs_update = 1;
   }
@@ -431,10 +427,6 @@ static void overlay_changed(void)
 // Called when overlay enabled/disabled changes
 static void overlay_enabled_changed(void)
 {
-  extern int overlay_needs_update;
-  extern void load_overlay(const char *filename);
-  extern char overlay_names[][64];
-  
   /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "overlay_enabled_changed: enabled=%d, selected=%d\n", 
@@ -447,8 +439,7 @@ static void overlay_enabled_changed(void)
     load_overlay(overlay_names[option_overlay_selected]);
     overlay_needs_update = 1;
     
-    // FORCE TEST: Apply overlay immediately to test if rendering works
-    extern void apply_overlay_borders(void);
+    // Apply overlay immediately
     apply_overlay_borders();
   } else {
     // Clear overlay when disabled and force screen refresh
@@ -460,9 +451,6 @@ static void overlay_enabled_changed(void)
 // Called when X/Y offset changes - need to reapply overlay and regenerate display list
 static void overlay_offset_changed(void)
 {
-  extern void set_gba_resolution(void);
-  extern int overlay_needs_update;
-  
   // Force complete screen refresh
   force_screen_refresh();
   
@@ -620,9 +608,6 @@ void add_recent_game(const char *game_path) {
   
   save_recent_games();
 }
-
-// Explicit declaration to ensure visibility
-extern u32 option_optimization_level;
 
 const char *optimization_level_options[] =
 {
@@ -1327,7 +1312,6 @@ void action_savestate(void)
 
   // Guard: ensure save directory is accessible before attempting save
   // A missing or unwritable dir_state is a common cause of blue screen crashes
-  extern char dir_state[];
   if (dir_state[0] != '\0') {
     SceUID test_dir = sceIoDopen(dir_state);
     if (test_dir < 0) {

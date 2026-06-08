@@ -22,6 +22,8 @@
 #define GUI_H
 
 
+extern char overlay_names[MAX_OVERLAYS][64];
+
 extern char dir_roms[MAX_PATH];
 extern char dir_save[MAX_PATH];
 extern char dir_state[MAX_PATH];

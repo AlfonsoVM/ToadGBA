@@ -81,6 +81,8 @@ void resume_overlay_after_saveload(void);
 
 void video_resolution_large(void);
 void video_resolution_small(void);
+void set_gba_resolution(void);
+void apply_overlay_borders(void);
 
 void init_video(int devkit_version);
 void video_term(void);
@@ -98,6 +100,10 @@ void clear_texture(u16 color);
 
 void blit_to_screen(u16 *src, u16 w, u16 h, u16 dest_x, u16 dest_y);
 u16 *copy_screen(void);
+
+extern int overlay_needs_update;
+extern int overlay_loaded;
+extern u32 fast_path_enabled;
 
 extern s32 affine_reference_x[2];
 extern s32 affine_reference_y[2];

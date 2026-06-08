@@ -45,6 +45,7 @@
 
 #define MAX_PATH (512)
 #define MAX_FILE (256)
+#define MAX_OVERLAYS (10)
 
 #define ALIGN_PSPDATA __attribute__((aligned(16)))
 #define ALIGN_DATA    __attribute__((aligned(4)))

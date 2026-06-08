@@ -360,7 +360,6 @@ u32 update_input(void)
   // Check for SELECT + Triangle combination to toggle fast path
   if ((buttons & PSP_CTRL_SELECT) && (non_repeat_buttons & PSP_CTRL_TRIANGLE))
   {
-    extern u32 fast_path_enabled;
     fast_path_enabled ^= 1;
     return 0;
   }
@@ -368,7 +367,6 @@ u32 update_input(void)
   // Check for SELECT + Circle combination to toggle layer merging
   if ((buttons & PSP_CTRL_SELECT) && (non_repeat_buttons & PSP_CTRL_CIRCLE))
   {
-    extern u32 layer_merge_enabled;
     layer_merge_enabled ^= 1;
     return 0;
   }
