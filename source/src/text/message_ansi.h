@@ -9,7 +9,7 @@
 	"ROM Buffer %2dMB",
 
     // MSG_BROWSER_HELP
-    "X:Select  O:Menu  Square:Up Dir",
+    "X:\xBE\xDD\xC0\xB8  O:\xD2\xC6\xAD\xB0  Sq:\xB3\xB4",
 
     // MSG_MENU_DATE_FMT_0
     "%4d/%2d/%2d %-3s %2d:%02d",
@@ -18,320 +18,320 @@
     "%2d/%2d/%4d %-3s %2d:%02d",
 
     // MSG_MAIN_MENU_TITLE
-    "Menu",
+    "\xD2\xC6\xAD\xB0",
 
     // MSG_MAIN_MENU_0
-    "Load state : SLOT %d",
+    "\xBD\xC3\xB0\xC4 \xDB\xB0\xC4\xDE : SLOT %d",
 
     // MSG_MAIN_MENU_1
-    "Save state : SLOT %d",
+    "\xBD\xC3\xB0\xC4 \xBE\xB0\xCC\xDE : SLOT %d",
 
     // MSG_MAIN_MENU_2
-    "Savestate details (R)",
+    "\xBD\xC3\xB0\xC4 \xBC\xAE\xB3\xBB\xB2 (R)",
 
     // MSG_MAIN_MENU_3
-    "Screen capture : %s",
+    "\xB9\xDE\xB0\xD1\xB8\xAC\xAD\xA3\xB0 : %s",
 
     // MSG_MAIN_MENU_4
-    "Emulator options",
+    "\xB4\xD0\xAD\xDA\xB0\xC0 \xB5\xCC\xDF\xBC\xAE\xDD",
 
     // MSG_MAIN_MENU_5
-    "Gamepad config",
+    "\xCA\xDF\xAF\xC4\xDE \xBA\xDD\xCC\xA8\xB8\xDE",
 
     // MSG_MAIN_MENU_6
-    "Analog stick config",
+    "\xB1\xC5\xDB\xB8\xDE \xBD\xC3\xA8\xAF\xB8 \xBA\xDD\xCC\xA8\xB8\xDE",
 
 	//MSG_MAIN_MENU_CHEAT
-    "Cheats options",
+    "\xC1\xB0\xC4 \xBA\xB0\xC4\xDE",
 
     // MSG_MAIN_MENU_7
-    "Load game (L)",
+    "\xD2\xB0\xD1 \xDB\xB0\xC4\xDE (L)",
 
     // MSG_MAIN_MENU_8
-    "Reset",
+    "\xD8\xBE\xAF\xC4",
 
     // MSG_MAIN_MENU_9
-    "Return to game",
+    "\xB9\xDE\xB0\xD1 \xC6 \xD3\xC4\xDE\xD9",
 
     // MSG_MAIN_MENU_10
-    "Sleep",
+    "\xBD\xD8\xB0\xCC\xDF",
 
     // MSG_MAIN_MENU_11
-    "Exit ToadGBA",
+    "ToadGBA \xBC\xAD\xB3\xD8\xAE\xB3",
 
     //MSG_MAIN_MENU_OVERLAY
-    "Overlay options",
-    
+    "\xB5\xB0\xCA\xDE\xB0\xDA\xB2 \xB5\xCC\xDF\xBC\xAE\xDD",
+
     //MSG_MAIN_MENU_RECENT
-    "Recent games",
+    "\xBB\xB2\xB7\xDD \xCC\xDE\xD7\xB2 \xD8\xBD\xC4",
 
     // MSG_MAIN_MENU_HELP_0
-    "X:Load  Left/Right:Select slot",
+    "X:\xDB\xB0\xC4\xDE  Left/Right:\xBD\xDB\xAF\xC4 \xBE\xDD\xC0\xB8",
 
     // MSG_MAIN_MENU_HELP_1
-    "X:Save  Left/Right:Select slot",
+    "X:\xBE\xB0\xCC\xDE  Left/Right:\xBD\xDB\xAF\xC4 \xBE\xDD\xC0\xB8",
 
     // MSG_MAIN_MENU_HELP_2
-    "X:Sub menu  (R):Shortcut key",
+    "X:\xBB\xCC\xDE\xD2\xC6\xAD\xB0  (R):\xBC\xAE\xB0\xC4\xB6\xAF\xC4",
 
     // MSG_MAIN_MENU_HELP_3
-    "X:Save Image  Left/Right:Select image format",
+    "X:\xB9\xDE\xB0\xD1\xB8\xAC\xAD\xA3\xB0  Left/Right:\xCC\xAB\xB0\xD2\xAF\xC4 \xBE\xDD\xC0\xB8",
 
     // MSG_MAIN_MENU_HELP_4
-    "X:Sub menu",
+    "X:\xBB\xCC\xDE\xD2\xC6\xAD\xB0",
 
     // MSG_MAIN_MENU_HELP_5
-    "X:Sub menu",
+    "X:\xBB\xCC\xDE\xD2\xC6\xAD\xB0",
 
     // MSG_MAIN_MENU_HELP_6
-    "X:Sub menu",
+    "X:\xBB\xCC\xDE\xD2\xC6\xAD\xB0",
 
     // MSG_MAIN_MENU_HELP_CHEAT
-    "X:Select to manage cheats",
+    "X:\xC1\xB0\xC4 \xBA\xB0\xC4\xDE \xB7\xC9\xB3",
 
     // MSG_MAIN_MENU_HELP_7
-    "X:File browser  (L):Shortcut key",
+    "X:\xCC\xA7\xB2\xD9 \xCC\xDE\xD7\xB3\xBB\xDE  (L):\xBC\xAE\xB0\xC4\xB6\xAF\xC4",
 
     // MSG_MAIN_MENU_HELP_8
-    "X:Reset game",
+    "X:\xD8\xBE\xAF\xC4",
 
     // MSG_MAIN_MENU_HELP_9
-    "X:Return to game",
+    "X:\xB9\xDE\xB0\xD1 \xC6 \xD3\xC4\xDE\xD9",
 
     // MSG_MAIN_MENU_HELP_10
-    "X:Sleep mode",
+    "X:\xBD\xD8\xB0\xCC\xDF \xD2\xB0\xC4",
 
     // MSG_MAIN_MENU_HELP_11
-    "X:Exit",
+    "X:\xBC\xAD\xB3\xD8\xAE\xB3",
 
     //MSG_MAIN_MENU_HELP_OVERLAY
-    "X:Select and configure screen overlays",
-    
+    "X:\xB5\xB0\xCA\xDE\xB0\xDA\xB2 \xBE\xDD\xC0\xB8 \xC6 \xBE\xAF\xC3\xB2",
+
     //MSG_MAIN_MENU_HELP_RECENT
-    "X:Load recently played games",
+    "X:\xBB\xB2\xB7\xDD \xCC\xDE\xD7\xB2 \xDB\xB0\xC4\xDE",
 
     // MSG_OPTION_MENU_TITLE
-    "Emulator options",
+    "\xB4\xD0\xAD\xDA\xB0\xC0 \xB5\xCC\xDF\xBC\xAE\xDD",
 
     // MSG_OPTION_MENU_0
-    "Display mode    : %s",
+    "\xCB\xDE\xC3\xDE\xB5 \xD2\xB0\xC4    : %s",
 
     // MSG_OPTION_MENU_1
-    "Magnification   : %d%%",
+    "\xB6\xB8\xC0\xDE\xB2 \xD8\xC4        : %d%%",
 
     // MSG_OPTION_MENU_2
-    "Bilinear filter : %s",
+    "\xCC\xA8\xD9\xC0\xB0          : %s",
 
     // MSG_OPTION_MENU_SHOW_FPS
-    "Show FPS        : %s",
+    "FPS \xCB\xAE\xB3\xBC\xDE          : %s",
 
 
     // MSG_OPTION_MENU_COLOR_CORRECTION
-    "Color Correction: %s",
+    "\xB6\xD7\xB0 \xCE\xBE\xB2        : %s",
 
     // MSG_OPTION_MENU_BUTTON_MAPPING
-    "Button Mapping  : %s",
+    "\xCA\xDF\xAF\xC4\xDE \xCF\xAF\xCB\xDF\xDD\xB8\xDE  : %s",
 
     // MSG_OPTION_MENU_3
-    "Frameskip type  : %s",
+    "\xBD\xB7\xAF\xCC\xDF \xC0\xB2\xCC\xDF   : %s",
 
     // MSG_OPTION_MENU_4
-    "Frameskip value : %d",
+    "\xBD\xB7\xAF\xCC\xDF \xC1           : %d",
 
     // MSG_OPTION_MENU_5
-    "CPU clock freq  : %s",
+    "CPU \xB8\xDB\xAF\xB8         : %s",
 
     // MSG_OPTION_MENU_6
-    "Sound volume    : %s",
+    "\xBB\xB3\xDD\xC4\xDE \xCE\xDE\xD8\xAD\xB0\xD1  : %s",
 
     // MSG_OPTION_MENU_7
-    "Stack optimize  : %s",
+    "\xBD\xC3\xAF\xB8 \xBD\xB7\xAF\xCC\xDF  : %s",
 
     // MSG_OPTION_MENU_8
-    "Boot from BIOS  : %s",
+    "BIOS \xB8\xC4\xDE\xB3        : %s",
 
     // MSG_OPTION_MENU_9
-    "Update backup   : %s",
+    "\xCA\xDE\xAF\xB8\xB1\xAF\xCC\xDF \xB3\xC3\xDE\xB3\xB5\xB2  : %s",
 
     // MSG_OPTION_MENU_10
-    "Language        : %s",
+    "\xB9\xDE\xB0\xD1 \xB9\xDE        : %s",
 
     // MSG_OPTION_MENU_DEFAULT
-    "Restore defaults",
+    "\xC3\xDE\xCC\xAB\xD9\xC4 \xC6 \xD3\xC4\xDE\xBD",
 
     // MSG_OPTION_MENU_11
-    "Back",
+    "\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_12
-    "Advanced Optimizations: %s",
+    "\xBA\xB3\xC4\xDE\xBC\xAD\xD0 \xBD\xB7\xAF\xCC\xDF  : %s",
 
     // MSG_SUBMENU_VIDEO
-    "Video settings >",
+    "\xCB\xDE\xC3\xDE\xB5 \xBE\xAF\xC3\xB2 >",
 
     // MSG_SUBMENU_PERFORMANCE
-    "Performance >",
+    "\xCC\xA8\xCC\xAB\xB0\xD2\xDD\xBD >",
 
     // MSG_SUBMENU_AUDIO
-    "Audio >",
+    "\xB5\xB0\xC3\xDE\xA8\xB5 >",
 
     // MSG_SUBMENU_CONTROLS
-    "Controls >",
+    "\xBA\xDD\xC4\xDB\xB0\xD9 >",
 
     // MSG_SUBMENU_SYSTEM
-    "System >",
+    "\xBC\xBD\xC3\xD1 >",
 
     // MSG_SUBMENU_DIRECTORIES
-    "Directories >",
+    "\xC3\xDE\xA8\xDA\xB8\xC4\xD8 >",
 
     // MSG_DIR_ROMS
-    "ROMs folder     :",
+    "ROM \xCC\xAB\xD9\xC0\xDE         :",
 
     // MSG_DIR_SAVE
-    "Saves folder    :",
+    "\xBE\xB0\xCC\xDE \xCC\xAB\xD9\xC0\xDE       :",
 
     // MSG_DIR_STATE
-    "Savestates      :",
+    "\xBD\xC3\xB0\xC4 \xCC\xAB\xD9\xC0\xDE       :",
 
     // MSG_DIR_CHEAT
-    "Cheats folder   :",
+    "\xC1\xB0\xC4 \xCC\xAB\xD9\xC0\xDE        :",
 
     // MSG_DIR_SNAP
-    "Screenshots     :",
+    "\xBD\xB8\xD8\xB0\xDD\xBC\xAE\xAF\xC4       :",
 
     // MSG_HELP_SUBMENU_DIRECTORIES
-    "File path settings for ROMs, saves, overlays",
+    "ROM/\xBE\xB0\xCC\xDE/\xB5\xB0\xCA\xDE\xB0\xDA\xB2 \xCC\xA5\xBB \xBE\xAF\xC3\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_DIR_ROMS
-    "X:Browse for ROMs folder  O:Back",
+    "X:ROM \xCC\xAB\xD9\xC0\xDE \xBE\xDD\xC0\xB8  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_DIR_SAVE
-    "X:Browse for saves folder  O:Back",
+    "X:\xBE\xB0\xCC\xDE \xCC\xAB\xD9\xC0\xDE \xBE\xDD\xC0\xB8  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_DIR_STATE
-    "X:Browse for savestates  O:Back",
+    "X:\xBD\xC3\xB0\xC4 \xCC\xAB\xD9\xC0\xDE \xBE\xDD\xC0\xB8  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_DIR_CHEAT
-    "X:Browse for cheats folder  O:Back",
+    "X:\xC1\xB0\xC4 \xCC\xAB\xD9\xC0\xDE \xBE\xDD\xC0\xB8  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_DIR_SNAP
-    "X:Browse for screenshots  O:Back",
+    "X:\xBD\xB8\xD8\xB0\xDD \xCC\xAB\xD9\xC0\xDE \xBE\xDD\xC0\xB8  O:\xD3\xC4\xDE\xD9",
 
     // MSG_VIDEO_BRIGHTNESS
-    "Brightness      : %d",
+    "\xB1\xB6\xD9\xBB           : %d",
 
     // MSG_VIDEO_CONTRAST
-    "Contrast        : %d",
+    "\xBA\xDD\xC4\xD7\xBD\xC4       : %d",
 
     // MSG_VIDEO_SATURATION
-    "Saturation      : %d",
+    "\xBB\xC1\xAD\xDA\xB0\xBC\xAE\xDD     : %d",
 
     // MSG_VIDEO_COLORTEMP
-    "Color temp      : %d",
+    "\xB6\xD7\xB0 \xC3\xDD\xCC\xDF       : %d",
 
     // MSG_VIDEO_SHARPNESS
-    "Sharpness       : %s",
+    "\xBC\xAB\xB0\xCC\xDF\xC8\xBD        : %s",
 
     // MSG_VIDEO_GRID
-    "LCD Grid        : %s",
+    "LCD \xB8\xDE\xD8\xAF\xC4\xDE        : %s",
 
     // MSG_VIDEO_COLOR_R
-    "Red boost       : %d",
+    "\xB2\xAF\xC4\xDE \xCC\xDE\xB0\xBD\xC4     : %d",
 
     // MSG_VIDEO_COLOR_G
-    "Green boost     : %d",
+    "\xB8\xDA\xB0\xDD \xCC\xDE\xB0\xBD\xC4     : %d",
 
     // MSG_VIDEO_COLOR_B
-    "Blue boost      : %d",
+    "\xB1\xB5 \xCC\xDE\xB0\xBD\xC4         : %d",
 
     // MSG_HELP_SUBMENU_VIDEO
-    "Display mode, filter, color and image adjustments",
+    "\xCB\xDE\xC3\xDE\xB5/\xB6\xD7\xB0 \xBE\xAF\xC3\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_SUBMENU_PERFORMANCE
-    "Frameskip, CPU clock and optimizations",
+    "\xCC\xA8\xCC\xAB\xB0\xD2\xDD\xBD \xBE\xAF\xC3\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_SUBMENU_AUDIO
-    "Sound volume and audio settings",
+    "\xB5\xB0\xC3\xDE\xA8\xB5 \xBE\xAF\xC3\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_SUBMENU_CONTROLS
-    "Button mapping and input settings",
+    "\xBA\xDD\xC4\xDB\xB0\xD9 \xBE\xAF\xC3\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_SUBMENU_SYSTEM
-    "Language, BIOS and system settings",
+    "\xBC\xBD\xC3\xD1 \xBE\xAF\xC3\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_VIDEO_BRIGHTNESS
-    "Left/Right: brightness (4=normal)  O:Back",
+    "Left/Right: \xB1\xB6\xD9\xBB (4=\xCC\xAD\xC4\xB3)  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_VIDEO_CONTRAST
-    "Left/Right: contrast (4=normal)  O:Back",
+    "Left/Right: \xBA\xDD\xC4\xD7\xBD\xC4 (4=\xCC\xAD\xC4\xB3)  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_VIDEO_SATURATION
-    "Left/Right: saturation (8=normal)  O:Back",
+    "Left/Right: \xBB\xC1\xAD\xDA\xB0\xBC\xAE\xDD (8=\xCC\xAD\xC4\xB3)  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_VIDEO_COLORTEMP
-    "Left/Right: color temp (0=warm, 16=cool)  O:Back",
+    "Left/Right: \xB6\xD7\xB0\xC3\xDD\xCC\xDF (0=\xB3\xA9\xB0\xD1, 16=\xB8\xB0\xD9)  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_VIDEO_SHARPNESS
-    "Left/Right: sharpness (0=off)  O:Back",
+    "Left/Right: \xBC\xAB\xB0\xCC\xDF\xC8\xBD (0=OFF)  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_VIDEO_GRID
-    "Left/Right: LCD grid overlay  O:Back",
+    "Left/Right: LCD \xB8\xDE\xD8\xAF\xC4\xDE  O:\xD3\xC4\xDE\xD9",
 
     // MSG_HELP_VIDEO_COLOR_RGB
-    "Left/Right: hue channel boost (4=neutral)  O:Back",
+    "Left/Right: \xB6\xD7\xB0 \xCC\xDE\xB0\xBD\xBD\xC4 (4=\xCC\xAD\xC4\xB3)  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_0
-    "Left/Right: display mode  O:Back",
+    "Left/Right: \xCB\xDE\xC3\xDE\xB5 \xD2\xB0\xC4  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_1
-    "Left/Right: screen magnification  O:Back",
+    "Left/Right: \xB6\xB8\xC0\xDE\xB2 \xD8\xC4  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_2
-    "Left/Right: screen filter  O:Back",
+    "Left/Right: \xCC\xA8\xD9\xC0\xB0  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_SHOW_FPS
-    "Left/Right: FPS display  O:Back",
+    "Left/Right: FPS \xCB\xAE\xB3\xBC\xDE  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_OPTIMIZATIONS
-    "Left/Right: toggle  O:Back",
+    "Left/Right: \xB7\xD8\xB6\xB4  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_COLOR_CORRECTION
-    "Left/Right: GBA color correction  O:Back",
+    "Left/Right: GBA \xB6\xD7\xB0 \xCE\xBE\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_BUTTON_MAPPING
-    "Left/Right: X/O or O/X button layout  O:Back",
+    "Left/Right: X/O \xCA\xDF\xAF\xC4\xDE \xCF\xAF\xCB\xDF\xDD\xB8\xDE  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_3
-    "Left/Right: frameskip type  O:Back",
+    "Left/Right: \xBD\xB7\xAF\xCC\xDF \xC0\xB2\xCC\xDF  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_4
-    "Left/Right: frameskip value  O:Back",
+    "Left/Right: \xBD\xB7\xAF\xCC\xDF \xC1  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_5
-    "Left/Right: CPU clock speed  O:Back",
+    "Left/Right: CPU \xB8\xDB\xAF\xB8  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_6
-    "Left/Right: sound volume  O:Back",
+    "Left/Right: \xBB\xB3\xDD\xC4\xDE \xCE\xDE\xD8\xAD\xB0\xD1  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_7
-    "Left/Right: stack optimize  O:Back",
+    "Left/Right: \xBD\xC3\xAF\xB8 \xBD\xB7\xAF\xCC\xDF  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_8
-    "Left/Right: boot from BIOS  O:Back",
+    "Left/Right: BIOS \xB8\xC4\xDE\xB3  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_9
-    "Left/Right: update backup  O:Back",
+    "Left/Right: \xCA\xDE\xAF\xB8\xB1\xAF\xCC\xDF \xB3\xC3\xDE\xB3\xB5\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_10
-    "Left/Right: menu language  O:Back",
+    "Left/Right: \xD2\xC6\xAD\xB0 \xB9\xDE  O:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_DEFAULT
-    "X:Restore default settings",
+    "X:\xC3\xDE\xCC\xAB\xD9\xC4 \xC6 \xD3\xC4\xDE\xBD",
 
     // MSG_OPTION_MENU_HELP_11
-    "X:Back",
+    "X:\xD3\xC4\xDE\xD9",
 
     // MSG_OPTION_MENU_HELP_12
-    "Left/Right: accuracy vs performance  O:Back",
+    "Left/Right: \xBB\xB2\xB8\xB8\xBD/\xCC\xA8\xCC\xAB\xB0\xD2\xDD\xBD  O:\xD3\xC4\xDE\xD9",
 
     // MSG_STATE_MENU_DATE_FMT_0
     "%4d/%2d/%2d %-3s %2d:%02d:%02d",
@@ -346,31 +346,31 @@
     "--/--/---- --- --:--:--",
 
     // MSG_STATE_MENU_STATE_NONE
-    "No data in this slot",
+    "\xC3\xDE\xB0\xC0 \xC5\xBC",
 
     // MSG_STATE_MENU_TITLE
-    "Savestate",
+    "\xBE\xB0\xCC\xDE \xBD\xC3\xB0\xC4",
 
     // MSG_STATE_MENU_0
     "",
 
     // MSG_STATE_MENU_1
-    "Load state from file",
+    "\xCC\xA7\xB2\xD9 \xB6\xD7 \xDB\xB0\xC4\xDE",
 
     // MSG_STATE_MENU_2
-    "Back",
+    "\xD3\xC4\xDE\xD9",
 
     // MSG_STATE_MENU_HELP_0
-    "Left/Right:Load<>Save  X:Execute",
+    "Left/Right:\xDB\xB0\xC4\xDE<>\xBE\xB0\xCC\xDE  X:\xBC\xAF\xBA\xB3",
 
     // MSG_STATE_MENU_HELP_1
-    "X:File browser",
+    "X:\xCC\xA7\xB2\xD9 \xCC\xDE\xD7\xB3\xBB\xDE  O:\xD3\xC4\xDE\xD9",
 
     // MSG_STATE_MENU_HELP_2
-    "X:Back",
+    "X:\xD3\xC4\xDE\xD9",
 
     // MSG_PAD_MENU_TITLE
-    "Gamepad config",
+    "\xCA\xDF\xAF\xC4\xDE \xBA\xDD\xCC\xA8\xB8\xDE",
 
     // MSG_PAD_MENU_0
     "Up     : %s",
@@ -409,13 +409,13 @@
     "SELECT : %s",
 
     // MSG_PAD_MENU_12
-    "Back",
+    "\xD3\xC4\xDE\xD9",
 
     // MSG_PAD_MENU_HELP_0
-    "Left/Right:Select",
+    "Left/Right:\xCA\xDF\xAF\xC4\xDE \xBB\xB2\xB7\xC3\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_PAD_MENU_HELP_1
-    "X:Back",
+    "X:\xD3\xC4\xDE\xD9",
 
     //PADの設定 コンフィグ
 
@@ -480,40 +480,40 @@
     "none",
 
     // MSG_A_PAD_MENU_TITLE
-    "Analog stick config",
+    "\xB1\xC5\xDB\xB8\xDE \xBD\xC3\xA8\xAF\xB8 \xBA\xDD\xCC\xA8\xB8\xDE",
 
     // MSG_A_PAD_MENU_0
-    "Analog Up : %s",
+    "\xB1\xC5\xDB\xB8\xDE Up : %s",
 
     // MSG_A_PAD_MENU_1
-    "Analog Down : %s",
+    "\xB1\xC5\xDB\xB8\xDE Down : %s",
 
     // MSG_A_PAD_MENU_2
-    "Analog Left : %s",
+    "\xB1\xC5\xDB\xB8\xDE Left : %s",
 
     // MSG_A_PAD_MENU_3
-    "Analog Right : %s",
+    "\xB1\xC5\xDB\xB8\xDE Right : %s",
 
     // MSG_A_PAD_MENU_4
-    "Enable analog input : %s",
+    "\xB1\xC5\xDB\xB8\xDE \xB7\xC9\xB3    : %s",
 
     // MSG_A_PAD_MENU_5
-    "Analog sensitivity  : %d",
+    "\xB1\xC5\xDB\xB8\xDE \xB6\xDD\xC4\xDE   : %d",
 
     // MSG_A_PAD_MENU_6
-    "Back",
+    "\xD3\xC4\xDE\xD9",
 
     // MSG_A_PAD_MENU_HELP_0
-    "Left/Right:Select",
+    "Left/Right:\xB1\xC5\xDB\xB8\xDE \xBB\xB2\xB7\xC3\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_A_PAD_MENU_HELP_1
-    "Left/Right:Select",
+    "Left/Right:\xB6\xDD\xC4\xDE \xC1\xAE\xB3\xBB\xB2  O:\xD3\xC4\xDE\xD9",
 
     // MSG_A_PAD_MENU_HELP_2
-    "X:Back",
+    "X:\xD3\xC4\xDE\xD9",
 
 	//MSG_CHEAT_MENU_TITLE,
-	"Cheats options",
+	"\xC1\xB0\xC4 \xBA\xB0\xC4\xDE",
 
 	//MSG_CHEAT_MENU_NON_LOAD,
 	"(no) %2d: ------------------------",
@@ -522,61 +522,61 @@
 	"%%s %2d: %s",
 
 	//MSG_CHEAT_MENU_1,
-	"Load Cheat File  (L)",
+	"\xC1\xB0\xC4 \xCC\xA7\xB2\xD9 \xDB\xB0\xC4\xDE  (L)",
 
 	//MSG_CHEAT_MENU_2,
-	"Back",
+	"\xD3\xC4\xDE\xD9",
 
 	//MSG_CHEAT_MENU_3,
-	"cheat page: %d",
+	"\xC1\xB0\xC4 \xCD\xDF\xB0\xBC\xDE: %d",
 
 	//MSG_CHEAT_MENU_HELP_0,
-	"Left/Right:Activate/deactivate",
+	"Left/Right:\xC1\xB0\xC4 \xB7\xD8\xB6\xB4  O:\xD3\xC4\xDE\xD9",
 
 	//MSG_CHEAT_MENU_HELP_1,
-	"X:Cheat browser  L:Shortcut key",
+	"X:\xC1\xB0\xC4 \xCC\xDE\xD7\xB3\xBB\xDE  L:\xBC\xAE\xB0\xC4\xB6\xAF\xC4  O:\xD3\xC4\xDE\xD9",
 
 	//MSG_CHEAT_MENU_HELP_2,
-	"X:Back",
+	"X:\xD3\xC4\xDE\xD9",
 
 	//MSG_CHEAT_MENU_HELP_3,
-	"Left/Right:Change page",
+	"Left/Right:\xCD\xDF\xB0\xBC\xDE \xB7\xD8\xB6\xB4  O:\xD3\xC4\xDE\xD9",
 
     //MSG_OVERLAY_MENU_TITLE
-    "Overlay Selection",
+    "\xB5\xB0\xCA\xDE\xB0\xDA\xB2 \xBE\xDD\xC0\xB8",
 
     //MSG_OVERLAY_MENU_0
-    "Overlay: %s",
+    "\xB5\xB0\xCA\xDE\xB0\xDA\xB2: %s",
 
     //MSG_OVERLAY_MENU_1
-    "Enabled: %s",
+    "\xB7\xC9\xB3: %s",
 
     //MSG_OVERLAY_MENU_2
-    "X Offset: %d",
+    "X \xB5\xCC\xBE\xAF\xC4: %d",
 
     //MSG_OVERLAY_MENU_3
-    "Y Offset: %d",
+    "Y \xB5\xCC\xBE\xAF\xC4: %d",
 
     //MSG_OVERLAY_MENU_4
-    "Back to main menu",
+    "\xD2\xC6\xAD\xB0 \xC6 \xD3\xC4\xDE\xD9",
 
     //MSG_OVERLAY_MENU_HELP_0
-    "Left/Right:Select overlay file",
+    "Left/Right:\xB5\xB0\xCA\xDE\xB0\xDA\xB2 \xBE\xDD\xC0\xB8  O:\xD3\xC4\xDE\xD9",
 
     //MSG_OVERLAY_MENU_HELP_1
-    "Left/Right:Toggle on/off",
+    "Left/Right:\xB5\xDD/\xB5\xCC \xB7\xD8\xB6\xB4  O:\xD3\xC4\xDE\xD9",
 
     //MSG_OVERLAY_MENU_HELP_2
-    "Left/Right:Adjust X position (0-240)",
+    "Left/Right:X \xB5\xCC\xBE\xAF\xC4 (0-240)  O:\xD3\xC4\xDE\xD9",
 
     //MSG_OVERLAY_MENU_HELP_3
-    "Left/Right:Adjust Y position (0-112)",
+    "Left/Right:Y \xB5\xCC\xBE\xAF\xC4 (0-112)  O:\xD3\xC4\xDE\xD9",
 
     //MSG_OVERLAY_MENU_HELP_4
-    "X:Back to main menu",
+    "X:\xD2\xC6\xAD\xB0 \xC6 \xD3\xC4\xDE\xD9",
 
     // MSG_NON_LOAD_GAME
-    "Game is not loaded",
+    "\xB9\xDE\xB0\xD1 \xC5\xBC",
 
     // MSG_DAYW_0
     "SUN",
@@ -624,13 +624,13 @@
     "MANUAL",
 
     // MSG_EXITONLY
-    "Exit Only",
+    "\xBC\xAD\xB3\xD8\xAE\xB3 \xC9\xDD",
 
     // MSG_LOAD
-    "LOAD",
+    "\xDB\xB0\xC4\xDE",
 
     // MSG_SAVE
-    "SAVE",
+    "\xBE\xB0\xCC\xDE",
 
     // MSG_SCN_SCALED_NONE
     "100% GU",
@@ -645,16 +645,16 @@
     "USER GU",
 
     // MSG_LANG_JAPANESE
-    "Japanese",
+    "\xC6\xCE\xDD\xBA\xDE",
 
     // MSG_LANG_ENGLISH
-    "English",
+    "\xB4\xB2\xBA\xDE",
 
     // MSG_LANG_CHS
-    "Chinese Simplified",
+    "\xB6\xB3\xC3\xDE\xB2 \xC1\xAD\xBA\xB4\xBA\xDE",
 
     // MSG_LANG_CHT
-    "Chinese Traditional",
+    "\xCC\xB3\xC4\xDE\xB3\xC1\xAD\xBA\xB4\xBA\xDE",
 
     // MSG_SS_DATE_FMT_0
     "%04d_%02d_%02d_%s%02d_%02d_%02d_%03d",
@@ -680,14 +680,14 @@
 
     // memory.c
     // MSG_LOADING_ROM
-    "Now Loading...",
+    "\xDB\xB0\xC4\xDE\xC1\xAD...",
 
     // MSG_SEARCHING_BACKUP_ID
-    "Searching BACKUP ID",
+    "BACKUP ID \xB8\xB4\xBB\xB8\xC1\xAD",
 
     // main.c
     // MSG_GBA_SLEEP_MODE
-    "SLEEP MODE",
+    "\xBD\xD8\xB0\xCC\xDF \xD2\xB0\xC4",
 
     // MSG_ERR_LOAD_DIR_INI
     "Could not load dir.ini file.\nEverything is set as the following directory.\n%s",
