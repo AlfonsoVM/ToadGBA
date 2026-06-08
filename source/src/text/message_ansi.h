@@ -199,7 +199,7 @@
     "Screenshots     :",
 
     // MSG_HELP_SUBMENU_DIRECTORIES
-    "File paths: ROMs, saves, overlays  O:Back",
+    "File path settings for ROMs, saves, overlays",
 
     // MSG_HELP_DIR_ROMS
     "X:Browse for ROMs folder  O:Back",
@@ -244,19 +244,19 @@
     "Blue boost      : %d",
 
     // MSG_HELP_SUBMENU_VIDEO
-    "Video: display, filter, color  O:Back",
+    "Display mode, filter, color and image adjustments",
 
     // MSG_HELP_SUBMENU_PERFORMANCE
-    "Performance: frameskip, CPU  O:Back",
+    "Frameskip, CPU clock and optimizations",
 
     // MSG_HELP_SUBMENU_AUDIO
-    "Audio: volume settings  O:Back",
+    "Sound volume and audio settings",
 
     // MSG_HELP_SUBMENU_CONTROLS
-    "Controls: button mapping  O:Back",
+    "Button mapping and input settings",
 
     // MSG_HELP_SUBMENU_SYSTEM
-    "System: language, BIOS  O:Back",
+    "Language, BIOS and system settings",
 
     // MSG_HELP_VIDEO_BRIGHTNESS
     "Left/Right: brightness (4=normal)  O:Back",
@@ -364,7 +364,7 @@
     "Left/Right:Load<>Save  X:Execute",
 
     // MSG_STATE_MENU_HELP_1
-    "X:Browse for state file  O:Back",
+    "X:File browser",
 
     // MSG_STATE_MENU_HELP_2
     "X:Back",
@@ -412,7 +412,7 @@
     "Back",
 
     // MSG_PAD_MENU_HELP_0
-    "Left/Right:Remap button  O:Back",
+    "Left/Right:Select",
 
     // MSG_PAD_MENU_HELP_1
     "X:Back",
@@ -504,10 +504,10 @@
     "Back",
 
     // MSG_A_PAD_MENU_HELP_0
-    "Left/Right:Remap analog  O:Back",
+    "Left/Right:Select",
 
     // MSG_A_PAD_MENU_HELP_1
-    "Left/Right:Adjust value  O:Back",
+    "Left/Right:Select",
 
     // MSG_A_PAD_MENU_HELP_2
     "X:Back",
@@ -531,16 +531,16 @@
 	"cheat page: %d",
 
 	//MSG_CHEAT_MENU_HELP_0,
-	"Left/Right:Toggle cheat  O:Back",
+	"Left/Right:Activate/deactivate",
 
 	//MSG_CHEAT_MENU_HELP_1,
-	"X:Cheat browser  L:Shortcut  O:Back",
+	"X:Cheat browser  L:Shortcut key",
 
 	//MSG_CHEAT_MENU_HELP_2,
 	"X:Back",
 
 	//MSG_CHEAT_MENU_HELP_3,
-	"Left/Right:Change page  O:Back",
+	"Left/Right:Change page",
 
     //MSG_OVERLAY_MENU_TITLE
     "Overlay Selection",
@@ -561,16 +561,16 @@
     "Back to main menu",
 
     //MSG_OVERLAY_MENU_HELP_0
-    "Left/Right:Select overlay  O:Back",
+    "Left/Right:Select overlay file",
 
     //MSG_OVERLAY_MENU_HELP_1
-    "Left/Right:Toggle on/off  O:Back",
+    "Left/Right:Toggle on/off",
 
     //MSG_OVERLAY_MENU_HELP_2
-    "Left/Right:X offset (0-240)  O:Back",
+    "Left/Right:Adjust X position (0-240)",
 
     //MSG_OVERLAY_MENU_HELP_3
-    "Left/Right:Y offset (0-112)  O:Back",
+    "Left/Right:Adjust Y position (0-112)",
 
     //MSG_OVERLAY_MENU_HELP_4
     "X:Back to main menu",
