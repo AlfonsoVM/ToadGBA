@@ -77,11 +77,11 @@ s32 ALIGN_DATA affine_reference_y[2];
 
 static u32 ALIGN_PSPDATA display_list[512];
 static u32 ALIGN_PSPDATA display_list_0[256];
-static u32 ALIGN_PSPDATA display_list_s2x[256]; // Scale2x call list
+static u32 ALIGN_PSPDATA display_list_s2x[256]; // Sharp Bilinear call list (doubled UV)
 
 static u16 *screen_texture = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2));
 
-// Scale2x output buffer in VRAM, right after screen_texture (256*256*2 bytes).
+// Sharp Bilinear output buffer in VRAM, right after screen_texture (256*256*2 bytes).
 // Stride = 512 so GU can treat it as a 512×512 power-of-2 texture.
 // Content: 480×320 pixels (GBA 240×160 scaled ×2 in both axes).
 #define SCALE2X_LINE_SIZE  512
@@ -92,7 +92,7 @@ static u16 *scale2x_buffer = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2) + (256 * 2
 // Number of GBA source rows to double for Sharp Bilinear — set from the display rect's
 // dh so we skip rows that will be clipped by the PSP screen boundary (272px).
 // ceil(dh / 2) source rows produce dh doubled rows; anything beyond is never displayed.
-// Updated by generate_display_list_scale2x_for_rect(); default = full GBA height.
+// Updated by generate_display_list_2x_for_rect() for Sharp Bilinear; default = full GBA height.
 static u32 pixel_double_rows = GBA_SCREEN_HEIGHT;
 
 // Grid filter — simulates GBA LCD pixel grid
@@ -184,64 +184,6 @@ static void apply_grid_filter(void)
   }
 }
 
-// Grid filter on scale2x_buffer (480×320) — used by Scale2x mode only.
-// Sharp Bilinear integrates the grid directly inside apply_pixel_double(),
-// so this function is not called for that mode.
-// Optimisations: cache-hot channel LUTs, u32 pairs, row prefetch.
-static void apply_grid_filter_2x(void)
-{
-  if (option_grid == 0) return;
-
-  // --- Odd rows ---
-  for (u32 dy = 1; dy < SCALE2X_H; dy += 2)
-  {
-    u32 *row32 = (u32 *)(scale2x_buffer + dy * SCALE2X_LINE_SIZE);
-
-    if (dy + 2 < SCALE2X_H)
-      __builtin_prefetch((u8 *)row32 + 2 * SCALE2X_LINE_SIZE * sizeof(u16), 0, 1);
-
-    if (option_grid == 1)
-    {
-      for (u32 dx = 0; dx < SCALE2X_W / 2; dx++)
-      {
-        u32 pair = row32[dx];
-        u32 lo = pair        & 0x7FFF;
-        u32 hi = (pair >> 16) & 0x7FFF;
-        row32[dx] = GRID_DARKEN(lo, grid_lut30) | (GRID_DARKEN(hi, grid_lut30) << 16);
-      }
-    }
-    else
-    {
-      // Even cols → lut28, odd cols → lut24, one pass
-      for (u32 dx = 0; dx < SCALE2X_W / 2; dx++)
-      {
-        u32 pair = row32[dx];
-        u32 lo = pair        & 0x7FFF;
-        u32 hi = (pair >> 16) & 0x7FFF;
-        row32[dx] = GRID_DARKEN(lo, grid_lut28) | (GRID_DARKEN(hi, grid_lut24) << 16);
-      }
-    }
-  }
-
-  if (option_grid == 1) return;
-
-  // --- Even rows, odd columns only ---
-  for (u32 dy = 0; dy < SCALE2X_H; dy += 2)
-  {
-    u32 *row32 = (u32 *)(scale2x_buffer + dy * SCALE2X_LINE_SIZE);
-
-    if (dy + 2 < SCALE2X_H)
-      __builtin_prefetch((u8 *)row32 + 2 * SCALE2X_LINE_SIZE * sizeof(u16), 0, 1);
-
-    for (u32 dx = 0; dx < SCALE2X_W / 2; dx++)
-    {
-      u32 pair = row32[dx];
-      u32 hi = (pair >> 16) & 0x7FFF;
-      row32[dx] = (pair & 0x0000FFFFu) | (GRID_DARKEN(hi, grid_lut28) << 16);
-    }
-  }
-}
-
 void *disp_frame;
 void *draw_frame;
 
@@ -318,7 +260,7 @@ const u8 ALIGN_DATA active_layers[8] =
 void set_gba_resolution(void);
 static void generate_display_list(float mag);
 static void generate_display_list_stretch(void);
-static void generate_display_list_scale2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh);
+static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh);
 static void bitbilt_gu(void);
 static void bitbilt_sw(void);
 
@@ -4154,7 +4096,7 @@ static void generate_display_list(float mag)
   sceGuFinish();
 
   // Also build Scale2x companion list for this same rect (UV doubled, same XY)
-  generate_display_list_scale2x_for_rect(dx, dy, dw, dh);
+  generate_display_list_2x_for_rect(dx, dy, dw, dh);
 }
 
 // Sharpness filter — unsharp mask applied to screen_texture before GPU upload.
@@ -4283,60 +4225,7 @@ static void apply_pixel_double(void)
   }
 }
 
-// AdvMAME2x Scale2x: 240×160 → 480×320 into scale2x_buffer.
-// For each source pixel E with neighbours B(above) D(left) F(right) H(below):
-//   P1(top-left)     = (D==B && D!=H && B!=F) ? D : E
-//   P2(top-right)    = (B==F && B!=D && F!=H) ? F : E
-//   P3(bottom-left)  = (D==H && D!=B && H!=F) ? D : E
-//   P4(bottom-right) = (H==F && D!=H && B!=F) ? F : E
-static void apply_scale2x(void)
-{
-  for (u32 sy = 0; sy < GBA_SCREEN_HEIGHT; sy++)
-  {
-    u16 *src   = screen_texture + sy * GBA_LINE_SIZE;
-    u16 *src_u = screen_texture + (sy > 0                  ? sy - 1 : 0)                    * GBA_LINE_SIZE;
-    u16 *src_d = screen_texture + (sy < GBA_SCREEN_HEIGHT-1 ? sy + 1 : GBA_SCREEN_HEIGHT-1) * GBA_LINE_SIZE;
-
-    u16 *dst_t = scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE;
-    u16 *dst_b = scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE;
-
-    // --- Left edge pixel (sx=0): D=E, no left neighbour ---
-    {
-      u16 B = src_u[0], E = src[0], F = src[1], H = src_d[0];
-      dst_t[0] = E;  // D==E so (D==B && D!=H && B!=F) can only differ if E==B, but D=E, treat as E
-      dst_t[1] = (B == F && B != E && F != H) ? F : E;
-      dst_b[0] = E;
-      dst_b[1] = (H == F && E != H && B != F) ? F : E;
-    }
-
-    // --- Main loop: sx=1..GBA_SCREEN_WIDTH-2 — no boundary checks needed ---
-    for (u32 sx = 1; sx < GBA_SCREEN_WIDTH - 1; sx++)
-    {
-      u16 B = src_u[sx];
-      u16 D = src[sx - 1];
-      u16 E = src[sx];
-      u16 F = src[sx + 1];
-      u16 H = src_d[sx];
-
-      dst_t[sx*2]   = (D == B && D != H && B != F) ? D : E;
-      dst_t[sx*2+1] = (B == F && B != D && F != H) ? F : E;
-      dst_b[sx*2]   = (D == H && D != B && H != F) ? D : E;
-      dst_b[sx*2+1] = (H == F && D != H && B != F) ? F : E;
-    }
-
-    // --- Right edge pixel (sx=W-1): F=E, no right neighbour ---
-    {
-      u32 sx = GBA_SCREEN_WIDTH - 1;
-      u16 B = src_u[sx], D = src[sx-1], E = src[sx], H = src_d[sx];
-      dst_t[sx*2]   = (D == B && D != H && B != E) ? D : E;
-      dst_t[sx*2+1] = E;
-      dst_b[sx*2]   = (D == H && D != B && H != E) ? D : E;
-      dst_b[sx*2+1] = E;
-    }
-  }
-}
-
-// Scale2x companion display list: same screen rect as the current display mode,
+// Sharp Bilinear companion display list: same screen rect as the current display mode,
 // but UV coordinates are doubled (u=0..480, v=0..320) to map scale2x_buffer correctly.
 //
 // Key insight for zoom/2× mode: dh=320 > PSP height 272, so GU clips the bottom
@@ -4345,7 +4234,7 @@ static void apply_scale2x(void)
 //
 // For other modes (4:3, stretch, 1.5×) where dh ≤ 272, GU compresses 320→dh rows;
 // some minor interpolation occurs but aspect ratio and magnification are respected.
-static void generate_display_list_scale2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh)
+static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh)
 {
   u32 i;
   Vertex *vertices, *vertices_tmp;
@@ -4427,30 +4316,15 @@ static void bitbilt_gu(void)
   // Apply sharpness filter before handing texture to GPU
   apply_sharpness();
 
-  if (option_screen_filter == FILTER_SCALE2X || option_screen_filter == FILTER_SHARP_BILINEAR)
+  if (option_screen_filter == FILTER_SHARP_BILINEAR)
   {
-    // Both Scale2x and Sharp Bilinear upscale to scale2x_buffer (480×320) first,
-    // then GU presents from that buffer using display_list_s2x.
-    // Scale2x uses GU_NEAREST (edge-aware, no blur).
-    // Sharp Bilinear uses GU_LINEAR (pixel-perfect 2× blocks + bilinear for 320→272 step).
-    if (option_screen_filter == FILTER_SCALE2X)
-    {
-      apply_scale2x();
-      // Grid for Scale2x: post-process pass (scale2x outputs varied pixels, can't integrate)
-      apply_grid_filter_2x();
-      // Scale2x always writes all GBA_SCREEN_HEIGHT×2 rows regardless of pixel_double_rows,
-      // so flush the full texture to keep the GPU coherent.
-      sceKernelDcacheWritebackRange(scale2x_buffer,
-        GBA_SCREEN_HEIGHT * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
-    }
-    else
-    {
-      // Sharp Bilinear: grid is integrated inside apply_pixel_double() — no extra pass needed.
-      apply_pixel_double();
-      // Flush only the rows pixel_double_rows actually wrote.
-      sceKernelDcacheWritebackRange(scale2x_buffer,
-        pixel_double_rows * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
-    }
+    // Sharp Bilinear: CPU 2× pixel double → scale2x_buffer (480×320),
+    // then GU presents with bilinear for the 320→272 step.
+    // Grid is integrated inside apply_pixel_double() — no extra pass needed.
+    apply_pixel_double();
+    // Flush only the rows pixel_double_rows actually wrote.
+    sceKernelDcacheWritebackRange(scale2x_buffer,
+      pixel_double_rows * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
     // Only re-point GPU texture at scale2x_buffer if it was previously on screen_texture.
@@ -4543,7 +4417,7 @@ static void generate_display_list_4x3(void)
   sceGuFinish();
 
   // Scale2x companion list for 4:3 mode
-  generate_display_list_scale2x_for_rect(dx, dy, dw, dh);
+  generate_display_list_2x_for_rect(dx, dy, dw, dh);
 }
 
 // Stretch display list - stretches GBA screen to fill entire PSP screen (480x272)
@@ -4611,7 +4485,7 @@ static void generate_display_list_stretch(void)
   sceGuFinish();
 
   // Scale2x companion list for stretch mode
-  generate_display_list_scale2x_for_rect(dx, dy, dw, dh);
+  generate_display_list_2x_for_rect(dx, dy, dw, dh);
 }
 
 
@@ -4682,14 +4556,10 @@ void video_resolution_small(void)
   sceGuClearColor(0);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
-  // Map filter option to a valid GU value (GU_NEAREST=0, GU_LINEAR=1).
-  // Scale2x:        CPU handles the upscale; GU presents with nearest (no extra blur).
+  // Map filter option to GU value (GU_NEAREST=0, GU_LINEAR=1).
   // Sharp Bilinear: CPU does 2× pixel double; GU applies bilinear for the 320→272 step.
   // Nearest/Bilinear: pass directly to GU.
-  u32 gu_filter;
-  if      (option_screen_filter == FILTER_SCALE2X)        gu_filter = GU_NEAREST;
-  else if (option_screen_filter == FILTER_SHARP_BILINEAR) gu_filter = GU_LINEAR;
-  else                                                     gu_filter = option_screen_filter;
+  u32 gu_filter = (option_screen_filter == FILTER_SHARP_BILINEAR) ? GU_LINEAR : option_screen_filter;
   sceGuTexFilter(gu_filter, gu_filter);
 
   sceGuFinish();

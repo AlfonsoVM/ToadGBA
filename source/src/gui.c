@@ -1475,7 +1475,6 @@ u32 menu(void)
   {
     MSG[MSG_OFF],
     MSG[MSG_ON],
-    "Scale2x",
     "Sharp Bilinear"
   };
 
