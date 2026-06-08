@@ -2201,7 +2201,7 @@ u32 menu(void)
 
     {NULL, NULL, NULL, "Aspect Ratio    : %s", (void*)aspect_ratio_options, &option_aspect_ratio, 4, 0, 2, STRING_SELECTION_OPTION},
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], filter_options, &option_screen_filter, 4, MSG_OPTION_MENU_HELP_2, 3),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], filter_options, &option_screen_filter, 3, MSG_OPTION_MENU_HELP_2, 3),
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_SHOW_FPS], on_off_options, &psp_fps_debug, 2, MSG_OPTION_MENU_HELP_SHOW_FPS, 4),
 
