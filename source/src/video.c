@@ -128,7 +128,6 @@ static const u8 grid_lut24[32] = { // factor 24/32 = 75% (corner)
 // Optimisations: cache-hot channel LUTs, u32 pairs, row prefetch.
 static void apply_grid_filter(void)
 {
-  extern u32 option_grid;
   if (option_grid == 0) return;
 
   // --- Odd rows (horizontal grid lines) ---
@@ -191,7 +190,6 @@ static void apply_grid_filter(void)
 // Optimisations: cache-hot channel LUTs, u32 pairs, row prefetch.
 static void apply_grid_filter_2x(void)
 {
-  extern u32 option_grid;
   if (option_grid == 0) return;
 
   // --- Odd rows ---
@@ -3831,15 +3829,6 @@ void init_color_correction_luts(void)
 // Call whenever any visual option changes. Single pass per scanline.
 void rebuild_combined_lut(void)
 {
-  extern u32 option_color_correction;
-  extern u32 option_brightness;
-  extern u32 option_contrast;
-  extern u32 option_saturation;
-  extern u32 option_colortemp;
-  extern u32 option_color_r;
-  extern u32 option_color_g;
-  extern u32 option_color_b;
-
   if (!combined_lut)
     combined_lut = (u16*)safe_malloc(32768 * sizeof(u16));
 
@@ -4088,9 +4077,6 @@ static void generate_display_list(float mag)
   dh = GBA_SCREEN_HEIGHT * mag;
 
   // Apply user-specified X/Y offset for overlay positioning
-  extern u32 option_overlay_offset_x;
-  extern u32 option_overlay_offset_y;
-  
   /*
   FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
@@ -4180,7 +4166,7 @@ static void generate_display_list(float mag)
 // strength levels: 1=subtle(288), 2=medium(384), 3=strong(512)
 static void apply_sharpness(void)
 {
-  extern u32 option_sharpness;
+
   if (option_sharpness == 0) return;
 
   // Weights for center pixel (neighbours weight = center - 256)
@@ -4253,7 +4239,6 @@ static void apply_sharpness(void)
 // Each u32 store covers one (even, odd) column pair — lo=even col, hi=odd col.
 static void apply_pixel_double(void)
 {
-  extern u32 option_grid;
 
   for (u32 sy = 0; sy < pixel_double_rows; sy++)
   {
@@ -4456,16 +4441,19 @@ static void bitbilt_gu(void)
       apply_scale2x();
       // Grid for Scale2x: post-process pass (scale2x outputs varied pixels, can't integrate)
       apply_grid_filter_2x();
+      // Scale2x always writes all GBA_SCREEN_HEIGHT×2 rows regardless of pixel_double_rows,
+      // so flush the full texture to keep the GPU coherent.
+      sceKernelDcacheWritebackRange(scale2x_buffer,
+        GBA_SCREEN_HEIGHT * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
     }
     else
     {
-      // Sharp Bilinear: grid is integrated inside apply_pixel_double() — no extra pass needed
+      // Sharp Bilinear: grid is integrated inside apply_pixel_double() — no extra pass needed.
       apply_pixel_double();
+      // Flush only the rows pixel_double_rows actually wrote.
+      sceKernelDcacheWritebackRange(scale2x_buffer,
+        pixel_double_rows * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
     }
-
-    // Flush only the rows we actually wrote (pixel_double_rows × 2 doubled rows).
-    sceKernelDcacheWritebackRange(scale2x_buffer,
-      pixel_double_rows * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
     // Only re-point GPU texture at scale2x_buffer if it was previously on screen_texture.
@@ -4713,8 +4701,6 @@ void video_resolution_small(void)
 
 void set_gba_resolution(void)
 {
-  extern u32 option_aspect_ratio;
-  
   /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "set_gba_resolution: option_screen_scale=%d, aspect_ratio=%d\n", 
@@ -5417,8 +5403,6 @@ static int cache_valid = 0;
 // Function declaration
 static void build_overlay_cache(void);
 
-extern u32 option_overlay_enabled;
-extern u32 option_overlay_selected;
 extern char overlay_names[][64];
 extern char dir_overlay[];
 

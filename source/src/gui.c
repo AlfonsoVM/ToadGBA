@@ -452,8 +452,6 @@ static void overlay_enabled_changed(void)
     apply_overlay_borders();
   } else {
     // Clear overlay when disabled and force screen refresh
-    extern void clear_overlay(void);
-    extern void force_screen_refresh(void);
     clear_overlay();
     force_screen_refresh(); // Clear any remaining overlay pixels
   }
@@ -463,7 +461,6 @@ static void overlay_enabled_changed(void)
 static void overlay_offset_changed(void)
 {
   extern void set_gba_resolution(void);
-  extern void force_screen_refresh(void);
   extern int overlay_needs_update;
   
   // Force complete screen refresh
@@ -2207,7 +2204,6 @@ u32 menu(void)
     option_button_mapping      = 0;
     option_resume_on_boot      = 0;
     option_auto_save_state     = 0;
-    extern void rebuild_combined_lut(void);
     rebuild_combined_lut();
   }
 
@@ -2763,7 +2759,6 @@ u32 menu(void)
   set_cpu_clock(option_clock_speed);
 
   // Rebuild combined color+brightness LUT with any new settings
-  extern void rebuild_combined_lut(void);
   rebuild_combined_lut();
 
   sceDisplayWaitVblankStart();
@@ -3228,7 +3223,6 @@ s32 load_config_file(void)
   option_resume_on_boot = 0;  // Default to Off
   option_auto_save_state = 0; // Default to Off
 
-  extern void rebuild_combined_lut(void);
   rebuild_combined_lut();
 
   return -1;

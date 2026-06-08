@@ -84,6 +84,8 @@ void video_resolution_small(void);
 
 void init_video(int devkit_version);
 void video_term(void);
+void rebuild_combined_lut(void);
+void force_screen_refresh(void);
 
 void print_string(const char *str, s16 x, u16 y, u16 fg_color, s16 bg_color);
 void print_string_ext(const char *str, s16 x, u16 y, u16 fg_color, s16 bg_color, void *_dest_ptr, u16 pitch);
