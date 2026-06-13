@@ -55,7 +55,7 @@ u32 option_overlay_offset_x = 120;  // X offset for game screen (0-240) - defaul
 u32 option_overlay_offset_y = 56;   // Y offset for game screen (0-112) - default center
 
 u32 option_frameskip_type = FRAMESKIP_AUTO;
-u32 option_frameskip_value = 9;
+u32 option_frameskip_value = 3;
 u32 option_clock_speed = PSP_CLOCK_333;
 
 char main_path[MAX_PATH];
@@ -552,6 +552,13 @@ static void synchronize(void)
 {
   static s32 fps = 60;
   static s32 frames_drawn = 60;
+  // Timestamp recorded at the end of each synchronize() call (after any
+  // vblank wait), used to measure pure GBA frame computation time.
+  static u64 last_sync_end_us = 0;
+
+  // Measure now, before any vblank wait, so that (now_us - last_sync_end_us)
+  // equals the time spent in actual GBA emulation for this frame.
+  u64 now_us = ticker();
 
   u32 used_frameskip_type  = option_frameskip_type;
   u32 used_frameskip_value = option_frameskip_value;
@@ -585,7 +592,7 @@ static void synchronize(void)
     if (psp_fps_debug != 0)
     {
       char print_buffer[80];
-      sprintf(print_buffer, "%02ld(%02ld)", 
+      sprintf(print_buffer, "%02ld(%02ld)",
               (long)fps, (long)frames_drawn);
       print_string(print_buffer, 0, 0, COLOR15_WHITE, COLOR15_BLACK);
     }
@@ -595,7 +602,7 @@ static void synchronize(void)
   {
     char turbo_msg[32];
     sprintf(turbo_msg, "%s %lux", MSG[MSG_TURBO], fast_forward_speed + 2);
-    
+
     if (psp_fps_debug != 0)
 	{
 			print_string_gbk(turbo_msg, 0, 12, COLOR15_WHITE, COLOR15_BLACK);
@@ -605,8 +612,8 @@ static void synchronize(void)
 		print_string_gbk(turbo_msg, 0, 0, COLOR15_WHITE, COLOR15_BLACK);
 	}
     used_frameskip_type = FRAMESKIP_MANUAL;
-    // Use different frameskip values: 2x = skip 1, 3x = skip 2
-    used_frameskip_value = (fast_forward_speed == 0) ? 1 : 2;
+    // Scale skip value with speed: 2x→skip1, 3x→skip2, 4x→skip3
+    used_frameskip_value = fast_forward_speed + 1;
   }
 
   skip_next_frame = 0;
@@ -640,6 +647,26 @@ static void synchronize(void)
 
     num_skipped_frames = 0;
   }
+
+  // Predictive frameskip: if this frame's emulation cost exceeded the 60fps
+  // frame budget (16667 us) we proactively skip the next frame, one vblank
+  // sooner than the reactive counter would detect the lag.
+  // Only applies in AUTO mode when we haven't already decided to skip.
+  if (!skip_next_frame &&
+      used_frameskip_type == FRAMESKIP_AUTO &&
+      last_sync_end_us != 0 &&
+      num_skipped_frames < option_frameskip_value)
+  {
+    if ((now_us - last_sync_end_us) > 16667ULL)
+    {
+      skip_next_frame = 1;
+      num_skipped_frames++;
+    }
+  }
+
+  // Record end-of-sync time AFTER any vblank wait so that next frame's
+  // compute-time measurement excludes idle time spent waiting for vsync.
+  last_sync_end_us = ticker();
 
   if (used_frameskip_type == FRAMESKIP_MANUAL)
   {
