@@ -4543,62 +4543,57 @@ void clear_screen(u32 color)
   //sceGuSync(0, GU_SYNC_FINISH);
 
   // Software Clear - work on PPSSPP and real PSP Hardware
-  
+
   // Convert COLOR32 (8-bit RGB) to COLOR16 (5-bit RGB, 5551 format)
   u32 r8 = (color >>  0) & 0xFF;
   u32 g8 = (color >>  8) & 0xFF;
   u32 b8 = (color >> 16) & 0xFF;
   u16 color16 = ((r8 >> 3) << 0) | ((g8 >> 3) << 5) | ((b8 >> 3) << 10) | 0x8000;
-  
+
   // Use UNCACHED VRAM (0x44000000) to match print_string()
   // Using cached (0x04000000) causes sync issues in PPSSPP and can mean text doesn't appear (same as Hardware Clear)
   u16 *vram_ptr = (u16 *)((u32)draw_frame | 0x44000000);
-  u32 pixels = PSP_LINE_SIZE * PSP_SCREEN_HEIGHT;
-  for (u32 i = 0; i < pixels; i++)
+
+  // Write two pixels per store (u32 pair) to halve the loop iteration count
+  // PSP_LINE_SIZE * PSP_SCREEN_HEIGHT = 512*272 = 139264, always even
+  u32 pair = ((u32)color16 << 16) | color16;
+  u32 *vp32 = (u32 *)vram_ptr;
+  u32 pixel_pairs = (PSP_LINE_SIZE * PSP_SCREEN_HEIGHT) >> 1;
+  for (u32 i = 0; i < pixel_pairs; i++)
   {
-    vram_ptr[i] = color16;
+    vp32[i] = pair;
   }
 }
 
 void clear_texture(u16 color)
 {
   u32 x, y;
-  u16 *p_dest, *p_dest0;
 
-  p_dest0 = screen_texture;
-
+  // Write two pixels per u32 store; GBA_SCREEN_WIDTH=240 is always even
+  u32 pair = ((u32)color << 16) | color;
   for (y = 0; y < GBA_SCREEN_HEIGHT; y++)
   {
-    p_dest = p_dest0;
-
-    for (x = 0; x < GBA_SCREEN_WIDTH; x++, p_dest++)
-      *p_dest = color;
-
-    p_dest0 += GBA_LINE_SIZE;
+    u32 *row = (u32 *)(screen_texture + y * GBA_LINE_SIZE);
+    for (x = 0; x < GBA_SCREEN_WIDTH / 2; x++)
+      row[x] = pair;
   }
 }
 
 
 u16 *copy_screen(void)
 {
-  u32 x, y;
+  u32 y;
   u16 *copy;
-  u16 *p_src, *p_src0;
   u16 *p_dest;
 
   copy = (u16 *)safe_malloc(GBA_SCREEN_SIZE);
 
-  p_src0 = screen_texture;
   p_dest = copy;
 
   for (y = 0; y < GBA_SCREEN_HEIGHT; y++)
   {
-    p_src = p_src0;
-
-    for (x = 0; x < GBA_SCREEN_WIDTH; x++, p_src++, p_dest++)
-      *p_dest = *p_src;
-
-    p_src0 += GBA_LINE_SIZE;
+    memcpy(p_dest, screen_texture + y * GBA_LINE_SIZE, GBA_SCREEN_WIDTH * sizeof(u16));
+    p_dest += GBA_SCREEN_WIDTH;
   }
 
   return copy;
