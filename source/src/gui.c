@@ -1400,8 +1400,9 @@ u32 menu(void)
 	int id_language;
   u32 i;
 
-  static u32 repeat;      repeat = 1;
-  static u32 return_value; return_value = 0;
+  static u32 repeat;               repeat = 1;
+  static u32 return_value;         return_value = 0;
+  static u32 menu_restart_requested; menu_restart_requested = 0;
 
   static u32 first_load;  first_load = 0;
 
@@ -1605,6 +1606,8 @@ u32 menu(void)
   auto void menu_default(void);
   auto void menu_load_cheat_file(void);
   auto void submenu_cheats_misc(void);
+
+  auto void on_language_change(void);
 
   auto void menu_load_file(void);
   auto void browse_dir_roms(void);
@@ -1909,6 +1912,14 @@ u32 menu(void)
 	else
 		option_language = 1;  // English (default for all other languages)
 
+  }
+
+  void on_language_change(void)
+  {
+    // Signal the menu loop to exit and restart so all string arrays
+    // re-initialize using the newly selected option_language.
+    menu_restart_requested = 1;
+    repeat = 0;
   }
 
   void menu_load_cheat_file(void)
@@ -2287,7 +2298,7 @@ u32 menu(void)
   // ── SYSTEM SUBMENU ──────────────────────────────────────────────────────
   MenuOptionType system_options[] =
   {
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 0),
+    STRING_SELECTION_OPTION(on_language_change, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 0),
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_8], yes_no_options, &option_boot_mode, 2, MSG_OPTION_MENU_HELP_8, 1),
 
@@ -2731,6 +2742,14 @@ u32 menu(void)
 
   } /* end while */
 
+  // If the user changed the language, restart the menu so all option arrays
+  // re-initialize their MSG[] string pointers with the new option_language.
+  if (menu_restart_requested)
+  {
+    menu_restart_requested = 0;
+    return_value = menu();
+    return return_value;
+  }
 
   scePowerLock(0);
 
