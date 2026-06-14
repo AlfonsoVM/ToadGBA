@@ -1886,7 +1886,7 @@ u32 menu(void)
 	option_auto_save_state = 0; // Default to off
 	psp_fps_debug = 0;
 	option_frameskip_type = FRAMESKIP_AUTO;
-	option_frameskip_value = 9;
+	option_frameskip_value = 3;
 	option_clock_speed = PSP_CLOCK_333;
 	option_sound_volume = 10;
 	option_stack_optimize = 1;
@@ -1895,8 +1895,11 @@ u32 menu(void)
 	option_screen_capture_format = 0;
 	option_enable_analog = 0;
 	option_analog_sensitivity = 4;
-	
-	// Get system language setting
+
+	// Default to English regardless of PSP system language
+	option_language = 1;
+
+	// Get system language setting (kept for reference but we default to English)
 	int id_language;
 	sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_LANGUAGE, &id_language);
 	// Map PSP system language to our supported languages
@@ -2163,7 +2166,7 @@ u32 menu(void)
     option_screen_filter       = FILTER_BILINEAR;
     psp_fps_debug              = 0;
     option_frameskip_type      = FRAMESKIP_AUTO;
-    option_frameskip_value     = 9;
+    option_frameskip_value     = 3;
     option_clock_speed         = PSP_CLOCK_333;
     option_sound_volume        = 10;
     option_stack_optimize      = 1;
@@ -3083,8 +3086,8 @@ s32 load_game_config_file(void)
       if ((enable_home_menu == 0) && (menu_button == -1))
         gamepad_config_map[0] = BUTTON_ID_MENU;
 
-      if (option_frameskip_value > 9)
-        option_frameskip_value = 9;
+      if (option_frameskip_value > 3)
+        option_frameskip_value = 3;
 
 	  u32 j;
       for(j = 0; j < MAX_CHEATS; j++)
@@ -3100,7 +3103,7 @@ s32 load_game_config_file(void)
   }
 
   option_frameskip_type = FRAMESKIP_AUTO;
-  option_frameskip_value = 9;
+  option_frameskip_value = 3;
   option_clock_speed = PSP_CLOCK_333;
 
   return -1;

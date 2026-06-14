@@ -87,6 +87,9 @@ const char *message[2][MSG_END] =
     //MSG_MAIN_MENU_OVERLAY
     "Overlay",
 
+    //MSG_MAIN_MENU_RECENT
+    "Recent games",
+
     // MSG_MAIN_MENU_HELP_0
     "��:���[�h  " FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":�X���b�g�I��",
 
@@ -128,6 +131,9 @@ const char *message[2][MSG_END] =
 
     //MSG_MAIN_MENU_HELP_OVERLAY
     "■:Select and configure screen overlays",
+
+    //MSG_MAIN_MENU_HELP_RECENT
+    "X:Load recently played games",
 
     // MSG_OPTION_MENU_TITLE
 	#include "text/option_menu_t.h"
@@ -181,6 +187,123 @@ const char *message[2][MSG_END] =
     // MSG_OPTION_MENU_11
     "�߂�",
 
+    // MSG_OPTION_MENU_12
+    "Advanced Optimizations: %s",
+
+    // MSG_SUBMENU_VIDEO
+    "Video settings >",
+
+    // MSG_SUBMENU_PERFORMANCE
+    "Performance >",
+
+    // MSG_SUBMENU_AUDIO
+    "Audio >",
+
+    // MSG_SUBMENU_CONTROLS
+    "Controls >",
+
+    // MSG_SUBMENU_SYSTEM
+    "System >",
+
+    // MSG_SUBMENU_DIRECTORIES
+    "Directories >",
+
+    // MSG_DIR_ROMS
+    "ROMs folder     :",
+
+    // MSG_DIR_SAVE
+    "Saves folder    :",
+
+    // MSG_DIR_STATE
+    "Savestates      :",
+
+    // MSG_DIR_CHEAT
+    "Cheats folder   :",
+
+    // MSG_DIR_SNAP
+    "Screenshots     :",
+
+    // MSG_HELP_SUBMENU_DIRECTORIES
+    "File paths: ROMs, saves, overlays  O:Back",
+
+    // MSG_HELP_DIR_ROMS
+    "X:Browse for ROMs folder  O:Back",
+
+    // MSG_HELP_DIR_SAVE
+    "X:Browse for saves folder  O:Back",
+
+    // MSG_HELP_DIR_STATE
+    "X:Browse for savestates  O:Back",
+
+    // MSG_HELP_DIR_CHEAT
+    "X:Browse for cheats folder  O:Back",
+
+    // MSG_HELP_DIR_SNAP
+    "X:Browse for screenshots  O:Back",
+
+    // MSG_VIDEO_BRIGHTNESS
+    "Brightness      : %d",
+
+    // MSG_VIDEO_CONTRAST
+    "Contrast        : %d",
+
+    // MSG_VIDEO_SATURATION
+    "Saturation      : %d",
+
+    // MSG_VIDEO_COLORTEMP
+    "Color temp      : %d",
+
+    // MSG_VIDEO_SHARPNESS
+    "Sharpness       : %s",
+
+    // MSG_VIDEO_GRID
+    "LCD Grid        : %s",
+
+    // MSG_VIDEO_COLOR_R
+    "Red boost       : %d",
+
+    // MSG_VIDEO_COLOR_G
+    "Green boost     : %d",
+
+    // MSG_VIDEO_COLOR_B
+    "Blue boost      : %d",
+
+    // MSG_HELP_SUBMENU_VIDEO
+    "Video: display, filter, color  O:Back",
+
+    // MSG_HELP_SUBMENU_PERFORMANCE
+    "Performance: frameskip, CPU  O:Back",
+
+    // MSG_HELP_SUBMENU_AUDIO
+    "Audio: volume settings  O:Back",
+
+    // MSG_HELP_SUBMENU_CONTROLS
+    "Controls: button mapping  O:Back",
+
+    // MSG_HELP_SUBMENU_SYSTEM
+    "System: language, BIOS  O:Back",
+
+    // MSG_HELP_VIDEO_BRIGHTNESS
+    "Left/Right: brightness (4=normal)  O:Back",
+
+    // MSG_HELP_VIDEO_CONTRAST
+    "Left/Right: contrast (4=normal)  O:Back",
+
+    // MSG_HELP_VIDEO_SATURATION
+    "Left/Right: saturation (8=normal)  O:Back",
+
+    // MSG_HELP_VIDEO_COLORTEMP
+    "Left/Right: color temp (0=warm, 16=cool)  O:Back",
+
+    // MSG_HELP_VIDEO_SHARPNESS
+    "Left/Right: sharpness (0=off)  O:Back",
+
+    // MSG_HELP_VIDEO_GRID
+    "Left/Right: LCD grid overlay  O:Back",
+
+    // MSG_HELP_VIDEO_COLOR_RGB
+    "Left/Right: hue channel boost (4=neutral)  O:Back",
+
     // MSG_OPTION_MENU_HELP_0
     FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":�I��   ����",
 
@@ -231,6 +354,9 @@ const char *message[2][MSG_END] =
 
     // MSG_OPTION_MENU_HELP_11
     "��:���C�����j���[",
+
+    // MSG_OPTION_MENU_HELP_12
+    "Left/Right: accuracy vs performance  O:Back",
 
     // MSG_STATE_MENU_DATE_FMT_0
     "%4d/%2d/%2d %-4s %2d:%02d:%02d",
@@ -618,18 +744,6 @@ const char *message[2][MSG_END] =
 
     // MSG_ERR_QUIT
     "�����{�^���������ƏI�����܂��B",
-
-    // MSG_VIDEO_COLOR_R
-    "Red boost       : %d",
-
-    // MSG_VIDEO_COLOR_G
-    "Green boost     : %d",
-
-    // MSG_VIDEO_COLOR_B
-    "Blue boost      : %d",
-
-    // MSG_HELP_VIDEO_COLOR_RGB
-    "Left/Right: selective color boost (4=neutral, 0-3=reduce, 5-8=boost dominant hue)",
 
     // MSG_BLANK
     ""
