@@ -30,7 +30,7 @@
 
 u32 sound_pause = 0;
 
-u32 gbc_sound_update = 0;
+volatile u32 gbc_sound_update = 0;
 
 typedef enum
 {
@@ -118,7 +118,7 @@ volatile int sound_active = 0;
 static void fill_sound_buffer(s16 *stream, u16 length);
 static int sound_update_thread(SceSize args, void *argp);
 
-u8 sound_sleep = 0;
+volatile u8 sound_sleep = 0;
 static void sound_thread_wakeup(void);
 
 u32 sound_buffer_base = 0;
