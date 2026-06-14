@@ -557,7 +557,7 @@ static void synchronize(void)
 
   if (frames == 60)
   {
-    fps = 3600 / vblank_count;
+    fps = (vblank_count > 0) ? (3600 / vblank_count) : 0;
     frames_drawn = 60 - interval_skipped_frames;
 
     vblank_count = 0;

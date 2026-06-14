@@ -2291,7 +2291,7 @@ static void order_obj(u8 video_mode)
   u16 *oam_ptr = oam_ram + 508;
 
   // Use simple memset clearing - sprite optimization may affect blending
-  memset(obj_priority_count, 0, 5 * 160);
+  memset(obj_priority_count, 0, sizeof(obj_priority_count));
   memset(obj_alpha_count, 0, 160);
 
   for (obj_num = 127; obj_num >= 0; obj_num--, oam_ptr -= 4)

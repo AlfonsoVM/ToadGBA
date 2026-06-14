@@ -447,7 +447,7 @@ void sound_timer_queue(u8 channel)
   for (i = 0; i < 4; i++)
   {
     fifo[fifo_top] = fifo_data[i];
-    fifo_top = (fifo_top + 1) % 32;
+    fifo_top = (fifo_top + 1) & 31;
   }
 
   ds->fifo_top = fifo_top;
@@ -859,11 +859,16 @@ void update_gbc_sound(u32 cpu_ticks)
   u64 count_ticks = delta_ticks(cpu_ticks, gbc_sound_last_cpu_ticks) * SOUND_FREQUENCY;
 
   buffer_ticks = FP08_24_TO_U32(count_ticks);
-  
+
   // Early exit if no ticks to process
   if (buffer_ticks == 0) {
     return;
   }
+
+  // Cap to half the ring buffer to guard against pathological delta_ticks
+  // (e.g. after a reset or an unexpectedly large cpu_ticks jump)
+  if (buffer_ticks > RING_BUFFER_SIZE / 2)
+    buffer_ticks = RING_BUFFER_SIZE / 2;
   
   gbc_sound_partial_ticks += FP08_24_FRACTIONAL_PART(count_ticks);
 
