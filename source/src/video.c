@@ -4395,9 +4395,13 @@ static void bitbilt_gu(void)
     // 2× pixel-double path: CPU upscales 240×160 → 480×320 into scale2x_buffer.
     // Used only for Sharp Bilinear. Grid is handled separately by apply_grid_overlay_gu().
     apply_pixel_double();
-    // scale2x_buffer is in uncached VRAM (0x04xxxxxx) — CPU writes bypass D-cache
-    // via write-combine, so no dcache flush is needed. sceGuTexFlush() below
-    // invalidates the GU's own texture cache, which is the only flush required.
+    // scale2x_buffer is in uncached VRAM — CPU D-cache writeback is a no-op for
+    // uncached addresses, BUT sceKernelDcacheWritebackRange also emits a MIPS SYNC
+    // instruction that drains the CPU write buffer.  Without SYNC, the GE can start
+    // reading the texture before the last CPU stores have been committed to physical
+    // VRAM, causing visual artifacts at the bottom of the image.
+    sceKernelDcacheWritebackRange(scale2x_buffer,
+      pixel_double_rows * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
     if (!gpu_tex_is_2x) {
@@ -4412,7 +4416,10 @@ static void bitbilt_gu(void)
   else
   {
     // Native path: GPU scales 240×160 screen_texture directly to display.
-    // screen_texture is in uncached VRAM — no dcache flush needed (same reason as above).
+    // Same write-buffer drain as above: the SYNC inside this call ensures
+    // the GBA renderer's last scanline writes are visible to the GE.
+    sceKernelDcacheWritebackRange(screen_texture,
+      GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
     if (gpu_tex_is_2x) {
