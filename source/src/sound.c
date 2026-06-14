@@ -20,11 +20,8 @@
 
 #include "common.h"
 
-// Enable fast audio mode for Pokemon ROM hacks with heavy audio
-#define FAST_AUDIO_MODE
-
-// Audio performance flag for games like Pokemon Unbound
-static u32 audio_performance_mode = 1;
+// Disable fast audio mode to retain audio quality
+// #define FAST_AUDIO_MODE
 
 
 #define SOUND_BUFFER_SIZE (SOUND_SAMPLES * 2)
@@ -592,49 +589,15 @@ void sound_timer(FIXED08_24 frequency_step, u8 channel)
 }
 
 
-// Cached volume values to reduce multiplications
-static s32 cached_envelope_volume_left = 0, cached_envelope_volume_right = 0;
-static s32 cached_wave_volume_left = 0, cached_wave_volume_right = 0;
-static u32 last_envelope_vol = 0xFFFF, last_master_vol = 0xFFFF;
-
 #define UPDATE_VOLUME_CHANNEL_ENVELOPE(channel)                               \
-  if (audio_performance_mode) {                                               \
-    volume_##channel = cached_envelope_volume_##channel;                      \
-  } else {                                                                    \
-    volume_##channel = gbc_sound_envelope_volume_table[envelope_volume] *     \
-                       gbc_sound_channel_volume_table[gbc_sound_master_volume_##channel] * \
-                       gbc_sound_master_volume_table[gbc_sound_master_volume]; \
-  }
+  volume_##channel = gbc_sound_envelope_volume_table[envelope_volume] *       \
+                     gbc_sound_channel_volume_table[gbc_sound_master_volume_##channel] * \
+                     gbc_sound_master_volume_table[gbc_sound_master_volume]   \
 
 #define UPDATE_VOLUME_CHANNEL_NOENVELOPE(channel)                             \
-  if (audio_performance_mode) {                                               \
-    volume_##channel = cached_wave_volume_##channel;                          \
-  } else {                                                                    \
-    volume_##channel = wave_volume *                                          \
-                       gbc_sound_channel_volume_table[gbc_sound_master_volume_##channel] * \
-                       gbc_sound_master_volume_table[gbc_sound_master_volume]; \
-  }
-
-// Update cached volumes only when envelope or master volume changes
-static inline void update_volume_cache(u32 envelope_volume) {
-  if (audio_performance_mode && (envelope_volume != last_envelope_vol || 
-                                 gbc_sound_master_volume != last_master_vol)) {
-    cached_envelope_volume_left = gbc_sound_envelope_volume_table[envelope_volume] *
-                                  gbc_sound_channel_volume_table[gbc_sound_master_volume_left] * 
-                                  gbc_sound_master_volume_table[gbc_sound_master_volume];
-    cached_envelope_volume_right = gbc_sound_envelope_volume_table[envelope_volume] *
-                                   gbc_sound_channel_volume_table[gbc_sound_master_volume_right] *
-                                   gbc_sound_master_volume_table[gbc_sound_master_volume];
-    cached_wave_volume_left = wave_volume *
-                              gbc_sound_channel_volume_table[gbc_sound_master_volume_left] * 
-                              gbc_sound_master_volume_table[gbc_sound_master_volume];
-    cached_wave_volume_right = wave_volume *
-                               gbc_sound_channel_volume_table[gbc_sound_master_volume_right] *
-                               gbc_sound_master_volume_table[gbc_sound_master_volume];
-    last_envelope_vol = envelope_volume;
-    last_master_vol = gbc_sound_master_volume;
-  }
-}
+  volume_##channel = wave_volume *                                            \
+                     gbc_sound_channel_volume_table[gbc_sound_master_volume_##channel] * \
+                     gbc_sound_master_volume_table[gbc_sound_master_volume]   \
 
 #define UPDATE_VOLUME(type)                                                   \
   UPDATE_VOLUME_CHANNEL_##type(left);                                         \
@@ -693,7 +656,6 @@ static inline void update_volume_cache(u32 envelope_volume) {
       }                                                                       \
                                                                               \
       UPDATE_VOLUME(ENVELOPE);                                                \
-      update_volume_cache(envelope_volume);                                      \
                                                                               \
       gs->envelope_volume = envelope_volume;                                  \
       envelope_ticks = gs->envelope_initial_ticks;                            \
@@ -904,12 +866,6 @@ void update_gbc_sound(u32 cpu_ticks)
     return;
   }
   
-  // Skip processing for very small buffer counts in performance mode
-  if (audio_performance_mode && buffer_ticks < 2) {
-    gbc_sound_last_cpu_ticks = cpu_ticks;
-    return;
-  }
-  
   gbc_sound_partial_ticks += FP08_24_FRACTIONAL_PART(count_ticks);
 
   if (gbc_sound_partial_ticks > 0x00FFFFFF)
@@ -929,7 +885,6 @@ void update_gbc_sound(u32 cpu_ticks)
     {
       sample_data = gs->sample_data;
       envelope_volume = gs->envelope_volume;
-      update_volume_cache(envelope_volume);
 
       GBC_SOUND_RENDER_CHANNEL(SAMPLES, 8, ENVELOPE, SWEEP);
 
@@ -944,7 +899,6 @@ void update_gbc_sound(u32 cpu_ticks)
     {
       sample_data = gs->sample_data;
       envelope_volume = gs->envelope_volume;
-      update_volume_cache(envelope_volume);
 
       GBC_SOUND_RENDER_CHANNEL(SAMPLES, 8, ENVELOPE, NOSWEEP);
 
@@ -983,7 +937,6 @@ void update_gbc_sound(u32 cpu_ticks)
     if (gs->active_flag != 0)
     {
       envelope_volume = gs->envelope_volume;
-      update_volume_cache(envelope_volume);
 
       if (noise_type != 0)
       {
