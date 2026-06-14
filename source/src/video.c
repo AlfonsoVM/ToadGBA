@@ -124,65 +124,10 @@ static const u8 grid_lut24[32] = { // factor 24/32 = 75% (corner)
    (u32)(lut[((px) >>  5) & 0x1F] <<  5) | \
    (u32)(lut[( px)        & 0x1F]       ) | 0x8000u)
 
-// Grid filter on native 240×160 buffer (non-2x modes).
-// Optimisations: cache-hot channel LUTs, u32 pairs, row prefetch.
-static void apply_grid_filter(void)
-{
-  if (option_grid == 0) return;
-
-  // --- Odd rows (horizontal grid lines) ---
-  for (u32 y = 1; y < GBA_SCREEN_HEIGHT; y += 2)
-  {
-    u32 *row32 = (u32 *)(screen_texture + y * GBA_LINE_SIZE);
-
-    // Prefetch the next odd row while processing this one
-    if (y + 2 < GBA_SCREEN_HEIGHT)
-      __builtin_prefetch((u8 *)row32 + 2 * GBA_LINE_SIZE * sizeof(u16), 0, 1);
-
-    if (option_grid == 1)
-    {
-      // Subtle: darken entire odd row with lut30, 2 pixels per u32 store
-      for (u32 x = 0; x < GBA_SCREEN_WIDTH / 2; x++)
-      {
-        u32 pair = row32[x];
-        u32 lo = pair        & 0x7FFF;
-        u32 hi = (pair >> 16) & 0x7FFF;
-        row32[x] = GRID_DARKEN(lo, grid_lut30) | (GRID_DARKEN(hi, grid_lut30) << 16);
-      }
-    }
-    else
-    {
-      // Full: even cols → lut28, odd cols → lut24; both in one pass over u32 pairs.
-      // Each u32 pair holds (even_col | odd_col<<16) in little-endian.
-      for (u32 x = 0; x < GBA_SCREEN_WIDTH / 2; x++)
-      {
-        u32 pair = row32[x];
-        u32 lo = pair        & 0x7FFF;   // even col
-        u32 hi = (pair >> 16) & 0x7FFF;  // odd col
-        row32[x] = GRID_DARKEN(lo, grid_lut28) | (GRID_DARKEN(hi, grid_lut24) << 16);
-      }
-    }
-  }
-
-  if (option_grid == 1) return;
-
-  // --- Even rows, odd columns only (vertical grid lines) ---
-  for (u32 y = 0; y < GBA_SCREEN_HEIGHT; y += 2)
-  {
-    u32 *row32 = (u32 *)(screen_texture + y * GBA_LINE_SIZE);
-
-    if (y + 2 < GBA_SCREEN_HEIGHT)
-      __builtin_prefetch((u8 *)row32 + 2 * GBA_LINE_SIZE * sizeof(u16), 0, 1);
-
-    // Odd column sits in the high half of each u32 pair; preserve the even col.
-    for (u32 x = 0; x < GBA_SCREEN_WIDTH / 2; x++)
-    {
-      u32 pair = row32[x];
-      u32 hi = (pair >> 16) & 0x7FFF;
-      row32[x] = (pair & 0x0000FFFFu) | (GRID_DARKEN(hi, grid_lut28) << 16);
-    }
-  }
-}
+// apply_grid_filter() removed: grid is now always rendered via apply_pixel_double()
+// into scale2x_buffer (480×320). This avoids slow CPU reads from VRAM (screen_texture
+// is at 0x04xxxxxx) and ensures grid lines are at full pixel precision before the GPU's
+// final scale-down, so no bilinear blurring of the grid occurs.
 
 void *disp_frame;
 void *draw_frame;
@@ -4315,11 +4260,15 @@ static void bitbilt_gu(void)
   // Apply sharpness filter before handing texture to GPU
   apply_sharpness();
 
-  if (option_screen_filter == FILTER_SHARP_BILINEAR)
+  if (option_screen_filter == FILTER_SHARP_BILINEAR || option_grid > 0)
   {
-    // Sharp Bilinear: CPU 2× pixel double → scale2x_buffer (480×320),
-    // then GU presents with bilinear for the 320→272 step.
-    // Grid is integrated inside apply_pixel_double() — no extra pass needed.
+    // 2× pixel-double path: CPU upscales 240×160 → 480×320 into scale2x_buffer.
+    // Used for Sharp Bilinear (always) and for any grid mode (grid > 0):
+    //   - Grid is integrated into apply_pixel_double() at zero extra VRAM-read cost.
+    //   - Grid lines land on exact pixel boundaries in the 480×320 buffer so the GPU's
+    //     final scale-down (320→272 rows) does not blur them.
+    // Every generate_display_list_*() also calls generate_display_list_2x_for_rect(),
+    // so display_list_s2x is always valid for the current display mode.
     apply_pixel_double();
     // Flush only the rows pixel_double_rows actually wrote.
     sceKernelDcacheWritebackRange(scale2x_buffer,
@@ -4338,10 +4287,8 @@ static void bitbilt_gu(void)
   }
   else
   {
-    // Native (non-2x) path: apply grid on 240×160 texture before GPU
-    apply_grid_filter();
-
-    // Flush only the screen_texture rows we rendered — not the entire D-cache.
+    // Native path: GPU scales 240×160 screen_texture directly to display.
+    // No grid active and no 2× needed — no CPU touch of screen_texture required.
     sceKernelDcacheWritebackRange(screen_texture, GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
