@@ -364,12 +364,6 @@ u32 update_input(void)
     return 0;
   }
 
-  // Check for SELECT + Circle combination to toggle layer merging
-  if ((buttons & PSP_CTRL_SELECT) && (non_repeat_buttons & PSP_CTRL_CIRCLE))
-  {
-    layer_merge_enabled ^= 1;
-    return 0;
-  }
 
   if ((enable_home_menu != 0) && ((non_repeat_buttons & PSP_CTRL_HOME) != 0))
   {

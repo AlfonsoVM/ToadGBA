@@ -81,7 +81,6 @@ u32 option_button_mapping = 0;  // 0 = X/O (X confirm, O cancel), 1 = O/X (O con
 u32 option_resume_on_boot = 0;  // 0 = off, 1 = on
 u32 option_auto_save_state = 0; // 0 = off, 1 = on
 u32 fast_forward_speed = 0;  // 0 = 1x (off), 1 = 2x, 2 = 3x
-u32 layer_merge_enabled = 1;  // Layer merging optimization
 
 u32 real_frame_count = 0;
 u32 virtual_frame_count = 0;

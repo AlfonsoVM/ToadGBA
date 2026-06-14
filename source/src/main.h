@@ -140,7 +140,6 @@ extern u32 option_resume_on_boot;
 extern u32 option_auto_save_state;
 extern u32 fast_forward_speed;
 extern u32 option_compatibility_mode;
-extern u32 layer_merge_enabled;
 
 extern u32 real_frame_count;
 extern u32 virtual_frame_count;
