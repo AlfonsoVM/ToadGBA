@@ -999,34 +999,50 @@ void set_sound_volume(void)
 
 static void fill_sound_buffer(s16 *stream, u16 length)
 {
-  u32 i;
-  s16 current_sample;
+  /* Split at the ring-buffer wrap point so inner loops need no per-sample
+     mask operation.  With RING_BUFFER_SIZE=32768 and length=1600 there is
+     at most one wrap, so we handle at most two linear segments. */
+  u32 first = RING_BUFFER_SIZE - sound_buffer_base;
+  if (first > length) first = length;
+  u32 second = length - first;
 
   if ((option_sound_volume != 0) && (reg[CPU_HALT_STATE] != CPU_STOP))
   {
-    for (i = 0; i < length; i++)
+    u32 i;
+    s16 *src = sound_buffer + sound_buffer_base;
+
+    for (i = 0; i < first; i++)
     {
-      current_sample = sound_buffer[sound_buffer_base];
+      s16 s = src[i];
+      s = LIMIT_MAX(s,  2047);
+      s = LIMIT_MIN(s, -2048);
+      stream[i] = s << 4;
+    }
+    memset(src, 0, first * sizeof(s16));
 
-      current_sample = LIMIT_MAX(current_sample,  2047);
-      current_sample = LIMIT_MIN(current_sample, -2048);
-
-      stream[i] = current_sample << 4;
-      sound_buffer[sound_buffer_base] = 0;
-
-      sound_buffer_base = (sound_buffer_base + 1) & RING_BUFFER_MASK;
+    if (second)
+    {
+      for (i = 0; i < second; i++)
+      {
+        s16 s = sound_buffer[i];
+        s = LIMIT_MAX(s,  2047);
+        s = LIMIT_MIN(s, -2048);
+        stream[first + i] = s << 4;
+      }
+      memset(sound_buffer, 0, second * sizeof(s16));
     }
   }
   else
   {
-    for (i = 0; i < length; i++)
-    {
-      stream[i] = 0;
-      sound_buffer[sound_buffer_base] = 0;
-
-      sound_buffer_base = (sound_buffer_base + 1) & RING_BUFFER_MASK;
-    }
+    /* Muted: zero the output stream and clear consumed ring-buffer slots
+       so accumulated-but-unread samples do not bleed into future frames. */
+    memset(stream, 0, length * sizeof(s16));
+    memset(sound_buffer + sound_buffer_base, 0, first * sizeof(s16));
+    if (second)
+      memset(sound_buffer, 0, second * sizeof(s16));
   }
+
+  sound_buffer_base = (sound_buffer_base + length) & RING_BUFFER_MASK;
 }
 
 static void sound_thread_wakeup(void)
