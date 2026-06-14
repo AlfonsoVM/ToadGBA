@@ -707,9 +707,8 @@ void sound_timer(FIXED08_24 frequency_step, u8 channel)
   sound_buffer[buffer_index + 0] += (current_sample * volume_left ) >> 22;    \
 
 #define GBC_SOUND_RENDER_SAMPLE_BOTH()                                        \
-  dest_sample = current_sample * ((volume_left + volume_right) >> 1) >> 22;   \
-  sound_buffer[buffer_index + 0] += dest_sample;                              \
-  sound_buffer[buffer_index + 1] += dest_sample;
+  sound_buffer[buffer_index + 0] += (current_sample * volume_left)  >> 22;   \
+  sound_buffer[buffer_index + 1] += (current_sample * volume_right) >> 22;
 #endif                                             \
 
 #define GBC_SOUND_RENDER_SAMPLES(type, sample_length, envelope_op, sweep_op)  \
@@ -854,7 +853,7 @@ void update_gbc_sound(u32 cpu_ticks)
   s32 volume_left, volume_right;
   u32 envelope_volume;
 
-  s32 current_sample, dest_sample;
+  s32 current_sample;
   s8 *sample_data;
 
   u64 count_ticks = delta_ticks(cpu_ticks, gbc_sound_last_cpu_ticks) * SOUND_FREQUENCY;
