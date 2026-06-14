@@ -85,10 +85,10 @@ const char *message[2][MSG_END] =
     "ToadGBA�̏I��",
 
     //MSG_MAIN_MENU_OVERLAY
-    "Overlay",
+    "ｵｰﾊﾞｰﾚｲ",
 
     //MSG_MAIN_MENU_RECENT
-    "Recent games",
+    "ｻｲｷﾝﾉｹﾞｰﾑ",
 
     // MSG_MAIN_MENU_HELP_0
     "��:���[�h  " FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":�X���b�g�I��",
@@ -130,10 +130,10 @@ const char *message[2][MSG_END] =
     "��:�I��",
 
     //MSG_MAIN_MENU_HELP_OVERLAY
-    "■:Select and configure screen overlays",
+    "■:ｵｰﾊﾞｰﾚｲﾉｾﾝﾀｸﾄｾｯﾃｲ",
 
     //MSG_MAIN_MENU_HELP_RECENT
-    "X:Load recently played games",
+    "X:ｻｲｷﾝﾌﾟﾚｲｼﾀｹﾞｰﾑｦﾛｰﾄﾞ",
 
     // MSG_OPTION_MENU_TITLE
 	#include "text/option_menu_t.h"
@@ -188,121 +188,121 @@ const char *message[2][MSG_END] =
     "�߂�",
 
     // MSG_OPTION_MENU_12
-    "Advanced Optimizations: %s",
+    "ｺｳﾄﾞｻｲﾃｷｶ      : %s",
 
     // MSG_SUBMENU_VIDEO
-    "Video settings >",
+    "ｲﾒｰｼﾞｾｯﾃｲ       >",
 
     // MSG_SUBMENU_PERFORMANCE
-    "Performance >",
+    "ﾊﾟﾌｫｰﾏﾝｽ        >",
 
     // MSG_SUBMENU_AUDIO
-    "Audio >",
+    "ｻｳﾝﾄﾞ            >",
 
     // MSG_SUBMENU_CONTROLS
-    "Controls >",
+    "ｺﾝﾄﾛｰﾙ          >",
 
     // MSG_SUBMENU_SYSTEM
-    "System >",
+    "ｼｽﾃﾑ             >",
 
     // MSG_SUBMENU_DIRECTORIES
-    "Directories >",
+    "ﾃﾞｨﾚｸﾄﾘ         >",
 
     // MSG_DIR_ROMS
-    "ROMs folder     :",
+    "ROMﾌｫﾙﾀﾞ         :",
 
     // MSG_DIR_SAVE
-    "Saves folder    :",
+    "ｾｰﾌﾞﾌｫﾙﾀﾞ       :",
 
     // MSG_DIR_STATE
-    "Savestates      :",
+    "ｾｰﾌﾞｽﾃｰﾄ        :",
 
     // MSG_DIR_CHEAT
-    "Cheats folder   :",
+    "ﾁｰﾄﾌｫﾙﾀﾞ        :",
 
     // MSG_DIR_SNAP
-    "Screenshots     :",
+    "ｽｸﾘｰﾝｼｮｯﾄ       :",
 
     // MSG_HELP_SUBMENU_DIRECTORIES
-    "File paths: ROMs, saves, overlays  O:Back",
+    "ﾌｧｲﾙﾊﾟｽ:ROM,ｾｰﾌﾞ,ｵｰﾊﾞｰﾚｲ  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_DIR_ROMS
-    "X:Browse for ROMs folder  O:Back",
+    "X:ROMﾌｫﾙﾀﾞｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_DIR_SAVE
-    "X:Browse for saves folder  O:Back",
+    "X:ｾｰﾌﾞﾌｫﾙﾀﾞｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_DIR_STATE
-    "X:Browse for savestates  O:Back",
+    "X:ｾｰﾌﾞｽﾃｰﾄｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_DIR_CHEAT
-    "X:Browse for cheats folder  O:Back",
+    "X:ﾁｰﾄﾌｫﾙﾀﾞｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_DIR_SNAP
-    "X:Browse for screenshots  O:Back",
+    "X:ｽｸﾘｰﾝｼｮｯﾄｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
 
     // MSG_VIDEO_BRIGHTNESS
-    "Brightness      : %d",
+    "ｱｶﾙｻ             : %d",
 
     // MSG_VIDEO_CONTRAST
-    "Contrast        : %d",
+    "ｺﾝﾄﾗｽﾄ           : %d",
 
     // MSG_VIDEO_SATURATION
-    "Saturation      : %d",
+    "ｻｲﾄﾞ              : %d",
 
     // MSG_VIDEO_COLORTEMP
-    "Color temp      : %d",
+    "ｲﾛｵﾝﾄﾞ           : %d",
 
     // MSG_VIDEO_SHARPNESS
-    "Sharpness       : %s",
+    "ｼｬｰﾌﾟﾈｽ          : %s",
 
     // MSG_VIDEO_GRID
-    "LCD Grid        : %s",
+    "LCDｸﾞﾘｯﾄﾞ        : %s",
 
     // MSG_VIDEO_COLOR_R
-    "Red boost       : %d",
+    "ｱｶﾌﾞｰｽﾄ          : %d",
 
     // MSG_VIDEO_COLOR_G
-    "Green boost     : %d",
+    "ﾐﾄﾞﾘﾌﾞｰｽﾄ        : %d",
 
     // MSG_VIDEO_COLOR_B
-    "Blue boost      : %d",
+    "ｱｵﾌﾞｰｽﾄ          : %d",
 
     // MSG_HELP_SUBMENU_VIDEO
-    "Video: display, filter, color  O:Back",
+    "ﾋﾞﾃﾞｵ:ﾋｮｳｼﾞ,ﾌｨﾙﾀ,ｶﾗｰ  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_SUBMENU_PERFORMANCE
-    "Performance: frameskip, CPU  O:Back",
+    "ﾊﾟﾌｫｰﾏﾝｽ:ﾌﾚｰﾑｽｷｯﾌﾟ,CPU  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_SUBMENU_AUDIO
-    "Audio: volume settings  O:Back",
+    "ｻｳﾝﾄﾞ:ｵﾝﾘｮｳｾｯﾃｲ  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_SUBMENU_CONTROLS
-    "Controls: button mapping  O:Back",
+    "ｺﾝﾄﾛｰﾙ:ﾎﾞﾀﾝﾏｯﾋﾟﾝｸﾞ  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_SUBMENU_SYSTEM
-    "System: language, BIOS  O:Back",
+    "ｼｽﾃﾑ:ｹﾞﾝｺﾞ,BIOS  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_VIDEO_BRIGHTNESS
-    "Left/Right: brightness (4=normal)  O:Back",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｱｶﾙｻ (4=ﾋｮｳｼﾞｭﾝ)  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_VIDEO_CONTRAST
-    "Left/Right: contrast (4=normal)  O:Back",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｺﾝﾄﾗｽﾄ (4=ﾋｮｳｼﾞｭﾝ)  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_VIDEO_SATURATION
-    "Left/Right: saturation (8=normal)  O:Back",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｻｲﾄﾞ (8=ﾋｮｳｼﾞｭﾝ)  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_VIDEO_COLORTEMP
-    "Left/Right: color temp (0=warm, 16=cool)  O:Back",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｲﾛｵﾝﾄﾞ (0=ｱﾀﾀｶ,16=ｽｽﾞ)  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_VIDEO_SHARPNESS
-    "Left/Right: sharpness (0=off)  O:Back",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｼｬｰﾌﾟﾈｽ (0=ｵﾌ)  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_VIDEO_GRID
-    "Left/Right: LCD grid overlay  O:Back",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":LCDｸﾞﾘｯﾄﾞ  ○:ﾓﾄﾞﾙ",
 
     // MSG_HELP_VIDEO_COLOR_RGB
-    "Left/Right: hue channel boost (4=neutral)  O:Back",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｶﾗｰﾌﾞｰｽﾄ (4=ﾆｭｰﾄﾗﾙ)  ○:ﾓﾄﾞﾙ",
 
     // MSG_OPTION_MENU_HELP_0
     FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":�I��   ����",
@@ -356,7 +356,7 @@ const char *message[2][MSG_END] =
     "��:���C�����j���[",
 
     // MSG_OPTION_MENU_HELP_12
-    "Left/Right: accuracy vs performance  O:Back",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｾｲｶｸｻ/ｾｲﾉｳ  ○:ﾓﾄﾞﾙ",
 
     // MSG_STATE_MENU_DATE_FMT_0
     "%4d/%2d/%2d %-4s %2d:%02d:%02d",
@@ -568,37 +568,37 @@ const char *message[2][MSG_END] =
 	FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":�y�[�W��ύX",
 
     //MSG_OVERLAY_MENU_TITLE
-    "Overlay Selection",
+    "ｵｰﾊﾞｰﾚｲｾﾝﾀｸ",
 
     //MSG_OVERLAY_MENU_0
-    "Overlay: %s",
+    "ｵｰﾊﾞｰﾚｲ         : %s",
 
     //MSG_OVERLAY_MENU_1
-    "Enabled: %s",
+    "ﾋｮｳｼﾞ            : %s",
 
     //MSG_OVERLAY_MENU_2
-    "X Offset: %d",
+    "Xｵﾌｾｯﾄ          : %d",
 
     //MSG_OVERLAY_MENU_3
-    "Y Offset: %d",
+    "Yｵﾌｾｯﾄ          : %d",
 
     //MSG_OVERLAY_MENU_4
-    "Back to main menu",
+    "ﾒｲﾝﾒﾆｭｰﾆﾓﾄﾞﾙ",
 
     //MSG_OVERLAY_MENU_HELP_0
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":Select overlay file",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｵｰﾊﾞｰﾚｲﾌｧｲﾙｦｾﾝﾀｸ",
 
     //MSG_OVERLAY_MENU_HELP_1
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":Toggle overlay on/off",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｵｰﾊﾞｰﾚｲｦｵﾝ/ｵﾌ",
 
     //MSG_OVERLAY_MENU_HELP_2
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":Adjust X position (0-240)",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":Xｲﾁﾖｳｾｲ (0-240)",
 
     //MSG_OVERLAY_MENU_HELP_3
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":Adjust Y position (0-112)",
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":Yｲﾁﾖｳｾｲ (0-112)",
 
     //MSG_OVERLAY_MENU_HELP_4
-    "X:Return to main menu",
+    "X:ﾒｲﾝﾒﾆｭｰﾆﾓﾄﾞﾙ",
 
     // MSG_NON_LOAD_GAME
     "�Q�[���̓��[�h����Ă��܂���",
