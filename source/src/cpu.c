@@ -4076,16 +4076,6 @@ static void init_translation_caches(void)
   memset(readonly_code_cache, 0xFF, readonly_cache_size);
   memset(writable_code_cache, 0xFF, writable_cache_size);
   
-  // Pre-touch cache lines to warm up the data cache
-  volatile u32 dummy;
-  for (u32 i = 0; i < readonly_cache_size; i += 64) {
-    dummy = *(volatile u32*)(readonly_code_cache + i);
-  }
-  for (u32 i = 0; i < writable_cache_size; i += 64) {
-    dummy = *(volatile u32*)(writable_code_cache + i);
-  }
-  (void)dummy; // Suppress unused variable warning
-  
   caches_initialized = 1;
 }
 
