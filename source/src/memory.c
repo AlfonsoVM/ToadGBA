@@ -3473,14 +3473,11 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
             {
               iwram_stack_optimize = 0;
             }
-/*
             if (!strcasecmp(current_variable, "flash_rom_type") && !strcasecmp(current_value, "128KB"))
             {
               flash_device_id = FLASH_DEVICE_MACRONIX_128KB;
             }
 
-            // DBZLGCYGOKU2 �Υץ��ƥ��Ȼر�
-            // EEPROM_V124���������(�F���Єe����) ��ָ������Є�����
             if (!strcasecmp(current_variable, "save_type"))
             {
               if (!strcasecmp(current_value, "sram"))
@@ -3492,7 +3489,6 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
               if (!strcasecmp(current_value, "eeprom"))
                 backup_type = BACKUP_EEPROM;
             }
-*/
             if (!strcasecmp(current_variable, "bios_rom_hack_39") &&
                 !strcasecmp(current_value, "yes"))
             {
