@@ -1284,7 +1284,6 @@ render_scanline_text_builder(transparent, alpha);
     tile_ptr = tile_base + (map_base[map_offset] * 64);                       \
     last_map_offset = map_offset;                                             \
   }                                                                           \
-  tile_ptr = tile_base + (map_base[(pixel_x / 8)] * 64);                      \
   current_pixel = tile_ptr[(pixel_x % 8)];                                    \
   tile_8bpp_draw_##combine_op(0, none, 0, alpha_op);                          \
   affine_render_next(combine_op);                                             \
