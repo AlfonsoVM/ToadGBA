@@ -124,10 +124,33 @@ static const u8 grid_lut24[32] = { // factor 24/32 = 75% (corner)
    (u32)(lut[((px) >>  5) & 0x1F] <<  5) | \
    (u32)(lut[( px)        & 0x1F]       ) | 0x8000u)
 
-// apply_grid_filter() removed: grid is now always rendered via apply_pixel_double()
-// into scale2x_buffer (480×320). This avoids slow CPU reads from VRAM (screen_texture
-// is at 0x04xxxxxx) and ensures grid lines are at full pixel precision before the GPU's
-// final scale-down, so no bilinear blurring of the grid occurs.
+// Grid overlay — drawn as a GPU pass directly on the PSP framebuffer in screen space.
+//
+// Previous approach (pixel_double): CPU read screen_texture (VRAM, slow) and wrote a
+// darkened 480×320 buffer. GPU then bilinearly scaled this down to the display height,
+// blurring the alternating dark/normal rows into an almost uniform result → subtle lines
+// invisible, and significant CPU overhead reading VRAM.
+//
+// Current approach: after the main screen render, issue a second GU pass that draws
+// 1-px-tall horizontal strips (and optional vertical strips) at the GBA row/column
+// boundaries in PSP screen-space coordinates. A multiply-blend (GU_FIX src=0, dst=factor)
+// darkens only the covered pixels without any CPU reads of screen_texture. Lines are at
+// exact PSP framebuffer resolution regardless of display mode, and the GPU workload is
+// trivial (~159 sprites). Zero CPU VRAM reads.
+
+// Current display rectangle — set once per mode-change in generate_display_list_2x_for_rect
+// so apply_grid_overlay_gu() knows where to draw screen-space lines.
+static u32 cur_disp_dx = 0;
+static u32 cur_disp_dy = 0;
+static u32 cur_disp_dw = PSP_SCREEN_WIDTH;
+static u32 cur_disp_dh = PSP_SCREEN_HEIGHT;
+
+// Vertex buffers for grid-overlay sprites. Pre-allocated in BSS (not inside the display
+// list) to avoid overflowing the 512-word display_list buffer with vertex data.
+// Float positions (GU_VERTEX_32BITF) sidestep s16-struct padding concerns.
+typedef struct { float x, y, z; } GridVtxF;
+static ALIGN_PSPDATA GridVtxF grid_vtx_h[2 * GBA_SCREEN_HEIGHT];  // horizontal lines
+static ALIGN_PSPDATA GridVtxF grid_vtx_v[2 * GBA_SCREEN_WIDTH];   // vertical lines
 
 void *disp_frame;
 void *draw_frame;
@@ -4134,53 +4157,26 @@ static void apply_sharpness(void)
 //   grid=1:  p      p       p30    p30   (subtle: odd row darkened)
 //   grid=2:  p      p28     p28    p24   (full:   odd col + odd row borders)
 //
-// Each u32 store covers one (even, odd) column pair — lo=even col, hi=odd col.
+// Grid is no longer applied here — it is drawn as a GPU screen-space overlay
+// by apply_grid_overlay_gu() after the main render. apply_pixel_double() now
+// only handles pixel doubling for the Sharp Bilinear filter path.
 static void apply_pixel_double(void)
 {
-
   for (u32 sy = 0; sy < pixel_double_rows; sy++)
   {
     u16 *src     = screen_texture + sy * GBA_LINE_SIZE;
     u32 *dst_t32 = (u32 *)(scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE);
     u32 *dst_b32 = (u32 *)(scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE);
 
-    // Prefetch next source row while processing this one
     if (sy + 1 < pixel_double_rows)
       __builtin_prefetch(screen_texture + (sy + 1) * GBA_LINE_SIZE, 0, 1);
 
-    if (option_grid == 0)
+    for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
     {
-      // No grid: u32 pair = (p | p<<16), then memcpy for dst_b
-      for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
-      {
-        u32 p = (u32)src[sx];
-        dst_t32[sx] = (p << 16) | p;
-      }
-      memcpy(dst_b32, dst_t32, SCALE2X_W * sizeof(u16));
+      u32 p = (u32)src[sx];
+      dst_t32[sx] = (p << 16) | p;
     }
-    else if (option_grid == 1)
-    {
-      // Subtle: dst_t = normal pair, dst_b = lut30 pair (odd row darkened)
-      for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
-      {
-        u32 p  = (u32)(src[sx] & 0x7FFF);
-        u32 pd = GRID_DARKEN(p, grid_lut30);
-        dst_t32[sx] = (p  | 0x8000u) | ((p  | 0x8000u) << 16);
-        dst_b32[sx] = pd             | (pd              << 16);
-      }
-    }
-    else // option_grid == 2
-    {
-      // Full: dst_t = (p, p28), dst_b = (p28, p24) — grid built in a single pass
-      for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
-      {
-        u32 p   = (u32)(src[sx] & 0x7FFF);
-        u32 p28 = GRID_DARKEN(p, grid_lut28);
-        u32 p24 = GRID_DARKEN(p, grid_lut24);
-        dst_t32[sx] = (p | 0x8000u) | (p28 << 16);  // even col=normal, odd col=lut28
-        dst_b32[sx] = p28           | (p24 << 16);  // even col=lut28,  odd col=lut24
-      }
-    }
+    memcpy(dst_b32, dst_t32, SCALE2X_W * sizeof(u16));
   }
 }
 
@@ -4197,6 +4193,10 @@ static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh)
 {
   u32 i;
   Vertex *vertices, *vertices_tmp;
+
+  // Save display rect so apply_grid_overlay_gu() can draw screen-space grid lines.
+  cur_disp_dx = dx;  cur_disp_dy = dy;
+  cur_disp_dw = dw;  cur_disp_dh = dh;
 
   // Compute how many GBA source rows to process.
   //
@@ -4270,32 +4270,98 @@ static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh)
   sceGuFinish();
 }
 
+// Grid overlay — draws horizontal (and optional vertical) darkening strips over the
+// PSP framebuffer using GPU multiply blend. Runs after the main screen render so it
+// operates at native PSP resolution: no bilinear blurring, no CPU VRAM reads.
+//
+// Blend equation: result = 0×drawn_color + darken_factor×existing_framebuffer
+//   → each covered pixel is multiplied by darken_factor, leaving uncovered pixels intact.
+//
+// Subtle (grid=1): 159 horizontal strips, factor ≈ 30/32 = 93.75%.
+// Full   (grid=2): same horizontal strips + 239 vertical strips, each at 87.5%.
+//   Intersections receive 87.5%×87.5% ≈ 76.6%, matching the lut24 (75%) corner target.
+static void apply_grid_overlay_gu(void)
+{
+  if (option_grid == 0) return;
+
+  const u32 dx = cur_disp_dx, dy = cur_disp_dy;
+  const u32 dw = cur_disp_dw, dh = cur_disp_dh;
+
+  // GU FIX blend color: 8-bit per channel, uniform R=G=B so endianness doesn't matter.
+  // subtle: 0xEF/0xFF ≈ 93.75% (matches grid_lut30 factor 30/32)
+  // full  : 0xDF/0xFF ≈ 87.45% (matches grid_lut28 factor 28/32)
+  const u32 darken = (option_grid == 1) ? 0x00EFEFEFu : 0x00DFDFDFu;
+
+  // Build horizontal line vertex pairs (top-left, bottom-right of a 1-px-tall sprite).
+  // Line k sits at the PSP row corresponding to the boundary between GBA rows k-1 and k.
+  u32 nh = 0;
+  for (u32 k = 1; k < GBA_SCREEN_HEIGHT; k++)
+  {
+    const float y = (float)(dy + (k * dh) / GBA_SCREEN_HEIGHT);
+    grid_vtx_h[nh].x = (float)dx;        grid_vtx_h[nh].y = y;       grid_vtx_h[nh].z = 0.0f; nh++;
+    grid_vtx_h[nh].x = (float)(dx + dw); grid_vtx_h[nh].y = y + 1.0f; grid_vtx_h[nh].z = 0.0f; nh++;
+  }
+  sceKernelDcacheWritebackRange(grid_vtx_h, nh * sizeof(GridVtxF));
+
+  u32 nv = 0;
+  if (option_grid == 2)
+  {
+    for (u32 k = 1; k < GBA_SCREEN_WIDTH; k++)
+    {
+      const float x = (float)(dx + (k * dw) / GBA_SCREEN_WIDTH);
+      grid_vtx_v[nv].x = x;        grid_vtx_v[nv].y = (float)dy;        grid_vtx_v[nv].z = 0.0f; nv++;
+      grid_vtx_v[nv].x = x + 1.0f; grid_vtx_v[nv].y = (float)(dy + dh); grid_vtx_v[nv].z = 0.0f; nv++;
+    }
+    sceKernelDcacheWritebackRange(grid_vtx_v, nv * sizeof(GridVtxF));
+  }
+
+  // GPU pass: multiply-blend lines over the current framebuffer.
+  // display_list is safe to reuse here — we've already sceGuSync'd the main render.
+  sceGuStart(GU_DIRECT, display_list);
+  sceGuDisable(GU_TEXTURE_2D);
+  sceGuEnable(GU_BLEND);
+  // result = 0×src + darken×dst  →  darken the framebuffer under each strip
+  sceGuBlendFunc(GU_ADD, GU_FIX, GU_FIX, 0x00000000u, darken);
+
+  sceGuDrawArray(GU_SPRITES,
+                 GU_VERTEX_32BITF | GU_TRANSFORM_2D,
+                 (s32)nh, NULL, grid_vtx_h);
+
+  if (option_grid == 2)
+  {
+    // Vertical pass: intersections are re-darkened by the same factor, giving
+    // 87.5% × 87.5% ≈ 76.6% at corners (close to lut24's 75% target).
+    sceGuDrawArray(GU_SPRITES,
+                   GU_VERTEX_32BITF | GU_TRANSFORM_2D,
+                   (s32)nv, NULL, grid_vtx_v);
+  }
+
+  sceGuDisable(GU_BLEND);
+  sceGuEnable(GU_TEXTURE_2D);
+  sceGuFinish();
+  sceGuSync(0, GU_SYNC_FINISH);
+}
+
 static void bitbilt_gu(void)
 {
   // Apply sharpness filter before handing texture to GPU
   apply_sharpness();
 
-  if (option_screen_filter == FILTER_SHARP_BILINEAR || option_grid > 0)
+  if (option_screen_filter == FILTER_SHARP_BILINEAR)
   {
     // 2× pixel-double path: CPU upscales 240×160 → 480×320 into scale2x_buffer.
-    // Used for Sharp Bilinear (always) and for any grid mode (grid > 0):
-    //   - Grid is integrated into apply_pixel_double() at zero extra VRAM-read cost.
-    //   - Grid lines land on exact pixel boundaries in the 480×320 buffer so the GPU's
-    //     final scale-down (320→272 rows) does not blur them.
-    // Every generate_display_list_*() also calls generate_display_list_2x_for_rect(),
-    // so display_list_s2x is always valid for the current display mode.
+    // Used only for Sharp Bilinear. Grid is handled separately by apply_grid_overlay_gu().
     apply_pixel_double();
     // Flush only the rows pixel_double_rows actually wrote.
     sceKernelDcacheWritebackRange(scale2x_buffer,
       pixel_double_rows * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
-    // Only re-point GPU texture at scale2x_buffer if it was previously on screen_texture.
     if (!gpu_tex_is_2x) {
       sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
       gpu_tex_is_2x = 1;
     }
-    sceGuTexFlush();  // invalidate GPU texture cache so it re-reads updated buffer
+    sceGuTexFlush();
     sceGuCallList(display_list_s2x);
     sceGuFinish();
     sceGuSync(0, GU_SYNC_FINISH);
@@ -4303,22 +4369,25 @@ static void bitbilt_gu(void)
   else
   {
     // Native path: GPU scales 240×160 screen_texture directly to display.
-    // No grid active and no 2× needed — no CPU touch of screen_texture required.
+    // No CPU touch of screen_texture — zero VRAM reads in this path.
     sceKernelDcacheWritebackRange(screen_texture, GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
-    // Only re-point GPU texture at screen_texture if it was previously on scale2x_buffer.
     if (gpu_tex_is_2x) {
       sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
       gpu_tex_is_2x = 0;
     }
-    sceGuTexFlush();  // invalidate GPU texture cache so it re-reads updated screen_texture
+    sceGuTexFlush();
     sceGuCallList(display_list_0);
     sceGuFinish();
     sceGuSync(0, GU_SYNC_FINISH);
   }
 
-  // Apply overlay AFTER GPU finishes to avoid conflicts
+  // Grid overlay: draw darkened strips in PSP screen space via GPU multiply blend.
+  // Must run after sceGuSync so the framebuffer has the full game image.
+  apply_grid_overlay_gu();
+
+  // Overlay borders (PNG overlay) — drawn last so they cover the grid at the edges.
   render_overlay();
 }
 
