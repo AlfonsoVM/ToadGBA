@@ -189,8 +189,8 @@ const u8 ALIGN_DATA obj_height_table[] =
   8, 16, 32, 64, 8, 8, 16, 32, 16, 32, 32, 64
 };
 
-u8 ALIGN_DATA obj_priority_list[5][160][128];
-u8 ALIGN_DATA obj_priority_count[5][160];
+u8 ALIGN_DATA obj_priority_list[160][5][128];
+u8 ALIGN_DATA obj_priority_count[160][5];
 u8 ALIGN_DATA obj_alpha_count[160];
 
 
@@ -2206,8 +2206,8 @@ static void render_scanline_obj_##alpha_op##_##map_space(u32 priority, u32 start
   render_scanline_dest_##alpha_op *dest_ptr;                                  \
   u8 *obj_tile_base = vram + 0x10000;                                         \
   u8 *tile_ptr;                                                               \
-  u8 obj_count = obj_priority_count[priority][pIO_REG(REG_VCOUNT)];      \
-  u8 *obj_list = obj_priority_list[priority][pIO_REG(REG_VCOUNT)];       \
+  u8 obj_count = obj_priority_count[pIO_REG(REG_VCOUNT)][priority];      \
+  u8 *obj_list = obj_priority_list[pIO_REG(REG_VCOUNT)][priority];       \
                                                                               \
   for (obj_num = 0; obj_num < obj_count; obj_num++)                           \
   {                                                                           \
@@ -2353,9 +2353,9 @@ static void order_obj(u8 video_mode)
           {
             for (row = obj_y; row < obj_y + obj_height; row++)
             {
-              current_count = obj_priority_count[obj_priority][row];
-              obj_priority_list[obj_priority][row][current_count] = obj_num;
-              obj_priority_count[obj_priority][row] = current_count + 1;
+              current_count = obj_priority_count[row][obj_priority];
+              obj_priority_list[row][obj_priority][current_count] = obj_num;
+              obj_priority_count[row][obj_priority] = current_count + 1;
               obj_alpha_count[row] = 1;
             }
           }
@@ -2366,9 +2366,9 @@ static void order_obj(u8 video_mode)
 
             for (row = obj_y; row < obj_y + obj_height; row++)
             {
-              current_count = obj_priority_count[obj_priority][row];
-              obj_priority_list[obj_priority][row][current_count] = obj_num;
-              obj_priority_count[obj_priority][row] = current_count + 1;
+              current_count = obj_priority_count[row][obj_priority];
+              obj_priority_list[row][obj_priority][current_count] = obj_num;
+              obj_priority_count[row][obj_priority] = current_count + 1;
             }
           }
         }
@@ -2393,7 +2393,7 @@ static void order_layers(u8 layer_flags)
       }
     }
 
-    if ((obj_priority_count[priority][pIO_REG(REG_VCOUNT)] > 0) && ((layer_flags & 0x10) != 0))
+    if ((obj_priority_count[pIO_REG(REG_VCOUNT)][priority] > 0) && ((layer_flags & 0x10) != 0))
     {
       layer_order[layer_count] = priority | 0x04;
       layer_count++;
