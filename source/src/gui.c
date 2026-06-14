@@ -284,6 +284,15 @@ static const char *recent_games_display[MAX_RECENT_GAMES];
 // Global yes/no options - needed for overlay menu
 static const char *global_yes_no_options[2];
 
+// Flag set by the language passive_function; consumed inside menu() where
+// local option arrays are in scope so on_language_change() can be called directly.
+static u8 language_change_pending = 0;
+
+void notify_language_change(void)
+{
+  language_change_pending = 1;
+}
+
 // Global menu structures for overlay - must be here to avoid scope issues  
 MenuOptionType overlay_options_global[5] = {
   {NULL, NULL, NULL, NULL, NULL, NULL, 0, 0, 0, STRING_SELECTION_OPTION},
@@ -1606,8 +1615,6 @@ u32 menu(void)
   auto void menu_load_cheat_file(void);
   auto void submenu_cheats_misc(void);
 
-  auto void on_language_change(void);
-
   auto void menu_load_file(void);
   auto void browse_dir_roms(void);
   auto void browse_dir_save(void);
@@ -2289,7 +2296,7 @@ u32 menu(void)
   // ── SYSTEM SUBMENU ──────────────────────────────────────────────────────
   MenuOptionType system_options[] =
   {
-    STRING_SELECTION_OPTION(on_language_change, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 0),
+    STRING_SELECTION_OPTION(notify_language_change, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 0),
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_8], yes_no_options, &option_boot_mode, 2, MSG_OPTION_MENU_HELP_8, 1),
 
@@ -2752,6 +2759,12 @@ u32 menu(void)
 
           if (current_option->passive_function != NULL)
             current_option->passive_function();
+
+          if (language_change_pending)
+          {
+            language_change_pending = 0;
+            on_language_change();
+          }
         }
         break;
 
@@ -2769,6 +2782,12 @@ u32 menu(void)
 
           if (current_option->passive_function != NULL)
             current_option->passive_function();
+
+          if (language_change_pending)
+          {
+            language_change_pending = 0;
+            on_language_change();
+          }
         }
         break;
 
