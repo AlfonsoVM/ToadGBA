@@ -826,7 +826,7 @@ void synchronize_sound(void)
   {
     if (SOUND_BUFFER_LENGTH > (SOUND_BUFFER_SIZE * 4))
     {
-      if (option_frameskip_type == FRAMESKIP_AUTO)
+      if (option_frameskip_type == FRAMESKIP_AUTO || option_frameskip_type == FRAMESKIP_SMART)
       {
         sceDisplayWaitVblankStart();
         real_frame_count = 0;

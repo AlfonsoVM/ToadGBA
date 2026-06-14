@@ -692,6 +692,9 @@ const char *message[2][MSG_END] =
     // MSG_MANUAL
     "�蓮",
 
+    // MSG_SMART
+    "SMART",
+
     // MSG_EXITONLY
     "�I�����̂�",
 

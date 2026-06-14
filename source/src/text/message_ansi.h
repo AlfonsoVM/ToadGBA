@@ -622,6 +622,9 @@
     // MSG_MANUAL
     "MANUAL",
 
+    // MSG_SMART
+    "SMART",
+
     // MSG_EXITONLY
     "Exit Only",
 

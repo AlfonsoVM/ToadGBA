@@ -54,7 +54,7 @@ u32 option_overlay_selected = 0;
 u32 option_overlay_offset_x = 120;  // X offset for game screen (0-240) - default center
 u32 option_overlay_offset_y = 56;   // Y offset for game screen (0-112) - default center
 
-u32 option_frameskip_type = FRAMESKIP_AUTO;
+u32 option_frameskip_type = FRAMESKIP_SMART;
 u32 option_frameskip_value = 3;
 u32 option_clock_speed = PSP_CLOCK_333;
 
@@ -622,7 +622,7 @@ static void synchronize(void)
   if (real_frame_count >= virtual_frame_count)
   {
     if ((real_frame_count > virtual_frame_count) &&
-        (used_frameskip_type == FRAMESKIP_AUTO) &&
+        (used_frameskip_type == FRAMESKIP_AUTO || used_frameskip_type == FRAMESKIP_SMART) &&
         (num_skipped_frames < option_frameskip_value))
     {
       skip_next_frame = 1;
@@ -651,9 +651,9 @@ static void synchronize(void)
   // Predictive frameskip: if this frame's emulation cost exceeded the 60fps
   // frame budget (16667 us) we proactively skip the next frame, one vblank
   // sooner than the reactive counter would detect the lag.
-  // Only applies in AUTO mode when we haven't already decided to skip.
+  // Only applies in SMART mode when we haven't already decided to skip.
   if (!skip_next_frame &&
-      used_frameskip_type == FRAMESKIP_AUTO &&
+      used_frameskip_type == FRAMESKIP_SMART &&
       last_sync_end_us != 0 &&
       num_skipped_frames < option_frameskip_value)
   {

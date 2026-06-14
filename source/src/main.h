@@ -78,9 +78,10 @@
 #define COLORTEMP_STEP    8   // per-step shift in 8-bit space (±64 max ≈ ±25% range)
 
 // frameskip type
-#define FRAMESKIP_AUTO   0
-#define FRAMESKIP_MANUAL 1
-#define FRAMESKIP_NONE   2
+#define FRAMESKIP_AUTO   0   // reactive only (vblank counter)
+#define FRAMESKIP_MANUAL 1   // fixed interval skip
+#define FRAMESKIP_NONE   2   // no skipping
+#define FRAMESKIP_SMART  3   // reactive + predictive (ticker-based)
 
 // psp cpu clock frequency
 #define PSP_CLOCK_222 0

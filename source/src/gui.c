@@ -1499,7 +1499,8 @@ u32 menu(void)
   {
     MSG[MSG_AUTO],
     MSG[MSG_MANUAL],
-    MSG[MSG_OFF]
+    MSG[MSG_OFF],
+    MSG[MSG_SMART]
   };
 
   const char *color_correction_options[] =
@@ -1894,7 +1895,7 @@ u32 menu(void)
 	option_resume_on_boot = 0; // Default to off
 	option_auto_save_state = 0; // Default to off
 	psp_fps_debug = 0;
-	option_frameskip_type = FRAMESKIP_AUTO;
+	option_frameskip_type = FRAMESKIP_SMART;
 	option_frameskip_value = 3;
 	option_clock_speed = PSP_CLOCK_333;
 	option_sound_volume = 10;
@@ -2245,7 +2246,7 @@ u32 menu(void)
   // ── PERFORMANCE SUBMENU ─────────────────────────────────────────────────
   MenuOptionType performance_options[] =
   {
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_3], frameskip_options, &option_frameskip_type, 3, MSG_OPTION_MENU_HELP_3, 0),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_3], frameskip_options, &option_frameskip_type, 4, MSG_OPTION_MENU_HELP_3, 0),
 
     NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_4], &option_frameskip_value, 10, MSG_OPTION_MENU_HELP_4, 1),
 
@@ -2490,6 +2491,7 @@ u32 menu(void)
     frameskip_options[0]        = MSG[MSG_AUTO];
     frameskip_options[1]        = MSG[MSG_MANUAL];
     frameskip_options[2]        = MSG[MSG_OFF];
+    frameskip_options[3]        = MSG[MSG_SMART];
     stack_optimize_options[0]   = MSG[MSG_OFF];
     stack_optimize_options[1]   = MSG[MSG_AUTO];
     update_backup_options[0]    = MSG[MSG_EXITONLY];
@@ -3256,7 +3258,7 @@ s32 load_game_config_file(void)
     }
   }
 
-  option_frameskip_type = FRAMESKIP_AUTO;
+  option_frameskip_type = FRAMESKIP_SMART;
   option_frameskip_value = 3;
   option_clock_speed = PSP_CLOCK_333;
 
