@@ -4576,8 +4576,6 @@ static void bitbilt_sw(void)
   u16 *vptr, *vptr0;
   u16 *d, *d0;
 
-  sceKernelDcacheWritebackAll();
-
   sceGuStart(GU_DIRECT, display_list);
 
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
@@ -5136,7 +5134,11 @@ static void draw_volume(int volume)
 {
   Vertex *vertices, *vertices_tmp;
 
-  sceKernelDcacheWritebackAll();
+  // Drain CPU write buffer for the 32-row volume icon written to screen_texture.
+  // (VRAM is uncached so D-cache writeback is a no-op, but the SYNC inside
+  //  this call ensures the writes are committed before the GE reads the texture.)
+  sceKernelDcacheWritebackRange(screen_texture + GBA_LINE_SIZE * VOLICON_OFFSET,
+    32 * GBA_LINE_SIZE * sizeof(u16));
 
   sceGuStart(GU_DIRECT, display_list);
 
@@ -5464,8 +5466,6 @@ void free_overlay_memory(void)
   current_quality = OVERLAY_QUALITY_FULL;
   cache_valid = 0;
   
-  // Force garbage collection to reclaim memory immediately
-  sceKernelDcacheWritebackAll();
 }
 
 // Temporarily free overlay memory for save/load operations
@@ -5510,13 +5510,9 @@ void force_screen_refresh(void)
   u16 *frame1 = (u16 *)psp_vram_addr((void *)PSP_FRAME_SIZE, 0, 0);
   
   for (int y = 0; y < PSP_SCREEN_HEIGHT; y++) {
-    for (int x = 0; x < PSP_SCREEN_WIDTH; x++) {
-      frame0[y * PSP_LINE_SIZE + x] = 0x0000;
-      frame1[y * PSP_LINE_SIZE + x] = 0x0000;
-    }
+    memset(frame0 + y * PSP_LINE_SIZE, 0, PSP_SCREEN_WIDTH * sizeof(u16));
+    memset(frame1 + y * PSP_LINE_SIZE, 0, PSP_SCREEN_WIDTH * sizeof(u16));
   }
-  
-  sceKernelDcacheWritebackAll();
 }
 
 // Build overlay cache with RLE compression and dynamic allocation
@@ -5716,12 +5712,6 @@ void apply_overlay_borders(void)
     }
   }
   
-  // Minimal cache flush - every 8 frames to reduce overhead
-  static int flush_counter = 0;
-  if (++flush_counter >= 8) {
-    sceKernelDcacheWritebackAll();
-    flush_counter = 0;
-  }
 }
 
 void render_overlay(void) 
