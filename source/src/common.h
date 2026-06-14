@@ -88,8 +88,9 @@
 // Enable memory optimization (skip waitstates for performance)
 #define PSP_MEMORY_OPTIMIZATIONS
 
-// Enable timer prescaling optimizations
-#define PSP_TIMER_OPTIMIZATIONS
+// PSP_TIMER_OPTIMIZATIONS removed: halving the prescale shift for timers 2-3
+// (prescale_table[2]=8 >> 1 = 4) made them run ~16x faster than real hardware,
+// corrupting audio timing in games that use timer 2/3 cascades for music.
 #endif
 
 // Performance vs accuracy tradeoff levels

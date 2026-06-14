@@ -207,15 +207,6 @@ CPU_ALERT_TYPE timer_control_high(u8 timer_number, u32 value)
         tm->status = TIMER_PRESCALE;
         u32 prescale_index = value & 0x03;
         tm->prescale = prescale_table[prescale_index];
-        
-#ifdef PSP_TIMER_OPTIMIZATIONS
-        // Timer prescaling optimization - RE-ENABLED FOR TESTING
-        // Testing to see if this causes timing issues
-        // For prescale values 64+ (index 2,3), reduce precision for performance
-        if (prescale_index >= 2 && timer_number >= 2) {
-          tm->prescale = prescale_table[prescale_index] >> 1;  // Half prescale for better performance
-        }
-#endif
       }
 
       tm->irq = (value >> 6) & 0x01;
