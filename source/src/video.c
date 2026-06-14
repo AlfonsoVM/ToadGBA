@@ -4160,23 +4160,43 @@ static void apply_sharpness(void)
 // Grid is no longer applied here — it is drawn as a GPU screen-space overlay
 // by apply_grid_overlay_gu() after the main render. apply_pixel_double() now
 // only handles pixel doubling for the Sharp Bilinear filter path.
+//
+// Performance note: screen_texture and scale2x_buffer are both in PSP VRAM.
+// CPU reads from VRAM are uncached (~100-200 cycles per halfword). The naive loop
+// doing src[sx] inside the inner loop costs 160×240 = 38 400 scattered reads (~17ms).
+// The old memcpy(dst_b32, dst_t32) was also VRAM→VRAM (slow read side).
+// __builtin_prefetch on an uncached VRAM address is a no-op on MIPS — removed.
+//
+// Fix: buffer each source row into main RAM with one bulk memcpy (sequential VRAM
+// read — much faster than scattered loads), compute the doubled u32 pairs entirely in
+// main RAM, then write to both VRAM destination rows via two sequential memcpy calls
+// (write-combined VRAM writes are fast). VRAM reads drop from 38 400 scattered loads
+// to 160 bulk memcpy calls of 480 bytes each.
 static void apply_pixel_double(void)
 {
+  // Two static main-RAM staging buffers — never touch VRAM inside the inner loop.
+  static u16 src_line[GBA_LINE_SIZE];           // source row from screen_texture
+  static u32 doubled_line[GBA_SCREEN_WIDTH];    // each pixel doubled into a u32 pair
+
   for (u32 sy = 0; sy < pixel_double_rows; sy++)
   {
-    u16 *src     = screen_texture + sy * GBA_LINE_SIZE;
-    u32 *dst_t32 = (u32 *)(scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE);
-    u32 *dst_b32 = (u32 *)(scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE);
+    // 1. Bulk-read source row from VRAM into main RAM (one sequential memcpy)
+    memcpy(src_line, screen_texture + sy * GBA_LINE_SIZE,
+           GBA_SCREEN_WIDTH * sizeof(u16));
 
-    if (sy + 1 < pixel_double_rows)
-      __builtin_prefetch(screen_texture + (sy + 1) * GBA_LINE_SIZE, 0, 1);
-
+    // 2. Compute pixel pairs entirely in main RAM (zero VRAM reads)
     for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
     {
-      u32 p = (u32)src[sx];
-      dst_t32[sx] = (p << 16) | p;
+      u32 p = (u32)src_line[sx];
+      doubled_line[sx] = (p << 16) | p;
     }
-    memcpy(dst_b32, dst_t32, SCALE2X_W * sizeof(u16));
+
+    // 3. Write both destination rows via sequential main-RAM→VRAM memcpy.
+    //    Sequential writes to VRAM benefit from write-combining (fast).
+    u32 *dst_t32 = (u32 *)(scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE);
+    u32 *dst_b32 = (u32 *)(scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE);
+    memcpy(dst_t32, doubled_line, GBA_SCREEN_WIDTH * sizeof(u32));
+    memcpy(dst_b32, doubled_line, GBA_SCREEN_WIDTH * sizeof(u32));
   }
 }
 
