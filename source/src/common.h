@@ -116,7 +116,7 @@
   ((filename_tag) >= 0)                                                       \
 
 #define FILE_CLOSE(filename_tag)                                              \
-  psp_fclose(filename_tag)                                                    \
+  psp_fclose(&(filename_tag))                                                 \
 
 #define FILE_READ(filename_tag, buffer, size)                                 \
   sceIoRead(filename_tag, buffer, size)                                       \

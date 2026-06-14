@@ -165,7 +165,7 @@ u32 file_length(char *filename);
 int set_cpu_clock(u32 psp_clock);
 
 SceUID psp_fopen(const char *filename, const char *mode);
-void psp_fclose(SceUID filename_tag);
+void psp_fclose(SceUID *filename_tag);
 
 void *safe_malloc(size_t size);
 

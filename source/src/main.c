@@ -1280,13 +1280,13 @@ SceUID psp_fopen(const char *filename, const char *mode)
   return tag;
 }
 
-void psp_fclose(SceUID filename_tag)
+void psp_fclose(SceUID *filename_tag)
 {
-  if (filename_tag < 0)
+  if (*filename_tag < 0)
     return;
 
-  sceIoClose(filename_tag);
-  filename_tag = -1;
+  sceIoClose(*filename_tag);
+  *filename_tag = -1;
 }
 
 
