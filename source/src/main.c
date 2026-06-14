@@ -648,19 +648,43 @@ static void synchronize(void)
     num_skipped_frames = 0;
   }
 
-  // Predictive frameskip: if this frame's emulation cost exceeded the 60fps
-  // frame budget (16667 us) we proactively skip the next frame, one vblank
-  // sooner than the reactive counter would detect the lag.
-  // Only applies in SMART mode when we haven't already decided to skip.
-  if (!skip_next_frame &&
-      used_frameskip_type == FRAMESKIP_SMART &&
-      last_sync_end_us != 0 &&
-      num_skipped_frames < option_frameskip_value)
+  // Predictive frameskip (SMART mode only): accumulate the per-frame time
+  // excess and skip once the debt reaches a full frame budget (16667 µs).
+  //
+  // The old single-frame threshold (> 16667 µs) fired on EVERY rendered frame
+  // for games running at ~22 ms/frame, producing a render/skip/render/skip
+  // alternation that settled at 30 FPS.
+  //
+  // The debt accumulator fires at the same net rate as the reactive counter
+  // (one skip per N slow frames) but one frame earlier, without oscillating:
+  //   - Each frame adds (emulation_time - 16667) to the debt.
+  //   - When debt >= 16667 µs (one full frame of accumulated lag), the next
+  //     frame is skipped and 16667 µs is deducted from the debt.
+  //   - Skipped frames are fast (~5 ms of emulation, no rendering), so debt
+  //     naturally decreases after a skip, preventing back-to-back skips.
+  //   - If the reactive already fired this frame (real > virtual), debt is
+  //     reset so the predictive doesn't pile on immediately afterwards.
+  static s64 smart_debt_us = 0;
+  if (used_frameskip_type == FRAMESKIP_SMART && last_sync_end_us != 0)
   {
-    if ((now_us - last_sync_end_us) > 16667ULL)
+    smart_debt_us += (s64)(now_us - last_sync_end_us) - 16667LL;
+    // Cap credit at one frame so a stretch of fast frames doesn't suppress
+    // the predictive for an unreasonably long time afterwards.
+    if (smart_debt_us < -16667LL)
+      smart_debt_us = -16667LL;
+
+    if (skip_next_frame)
+    {
+      // Reactive counter already decided to skip (real > virtual); reset debt
+      // so the predictive doesn't also fire on the very next rendered frame.
+      smart_debt_us = 0;
+    }
+    else if (num_skipped_frames < option_frameskip_value &&
+             smart_debt_us >= 16667LL)
     {
       skip_next_frame = 1;
       num_skipped_frames++;
+      smart_debt_us -= 16667LL;
     }
   }
 
