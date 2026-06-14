@@ -85,10 +85,12 @@ const char *message[2][MSG_END] =
     "ToadGBA�̏I��",
 
     //MSG_MAIN_MENU_OVERLAY
-    "ｵｰﾊﾞｰﾚｲ",
+    // オーバーレイ
+    "\x83\x49\x81\x5B\x83\x6F\x81\x5B\x83\x8C\x83\x43",
 
     //MSG_MAIN_MENU_RECENT
-    "ｻｲｷﾝﾉｹﾞｰﾑ",
+    // サイキンノゲーム
+    "\x83\x54\x83\x43\x83\x4C\x83\x93\x83\x6D\x83\x51\x81\x5B\x83\x80",
 
     // MSG_MAIN_MENU_HELP_0
     "��:���[�h  " FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":�X���b�g�I��",
@@ -130,10 +132,12 @@ const char *message[2][MSG_END] =
     "��:�I��",
 
     //MSG_MAIN_MENU_HELP_OVERLAY
-    "■:ｵｰﾊﾞｰﾚｲﾉｾﾝﾀｸﾄｾｯﾃｲ",
+    // O:オーバーレイのセッテイ
+    "O:\x83\x49\x81\x5B\x83\x6F\x81\x5B\x83\x8C\x83\x43\x83\x6D\x83\x5A\x83\x62\x83\x65\x83\x43",
 
     //MSG_MAIN_MENU_HELP_RECENT
-    "X:ｻｲｷﾝﾌﾟﾚｲｼﾀｹﾞｰﾑｦﾛｰﾄﾞ",
+    // X:サイキンプレイシタゲームヲロード
+    "X:\x83\x54\x83\x43\x83\x4C\x83\x93\x83\x76\x83\x8C\x83\x43\x83\x56\x83\x5E\x83\x51\x81\x5B\x83\x80\x83\x8D\x81\x5B\x83\x68",
 
     // MSG_OPTION_MENU_TITLE
 	#include "text/option_menu_t.h"
@@ -188,121 +192,160 @@ const char *message[2][MSG_END] =
     "�߂�",
 
     // MSG_OPTION_MENU_12
-    "ｺｳﾄﾞｻｲﾃｷｶ      : %s",
+    // コードサイテキカ
+    "\x83\x52\x81\x5B\x83\x68\x83\x54\x83\x43\x83\x65\x83\x4C\x83\x4A      : %s",
 
     // MSG_SUBMENU_VIDEO
-    "ｲﾒｰｼﾞｾｯﾃｲ       >",
+    // イメージセッテイ
+    "\x83\x43\x83\x81\x81\x5B\x83\x57\x83\x5A\x83\x62\x83\x65\x83\x43       >",
 
     // MSG_SUBMENU_PERFORMANCE
-    "ﾊﾟﾌｫｰﾏﾝｽ        >",
+    // パフォーマンス
+    "\x83\x70\x83\x74\x83\x48\x81\x5B\x83\x7D\x83\x93\x83\x58        >",
 
     // MSG_SUBMENU_AUDIO
-    "ｻｳﾝﾄﾞ            >",
+    // サウンド
+    "\x83\x54\x83\x45\x83\x93\x83\x68            >",
 
     // MSG_SUBMENU_CONTROLS
-    "ｺﾝﾄﾛｰﾙ          >",
+    // コントロール
+    "\x83\x52\x83\x93\x83\x67\x83\x8D\x81\x5B\x83\x8B          >",
 
     // MSG_SUBMENU_SYSTEM
-    "ｼｽﾃﾑ             >",
+    // システム
+    "\x83\x56\x83\x58\x83\x65\x83\x80             >",
 
     // MSG_SUBMENU_DIRECTORIES
-    "ﾃﾞｨﾚｸﾄﾘ         >",
+    // ディレクトリ
+    "\x83\x66\x83\x42\x83\x8C\x83\x4E\x83\x67\x83\x8A         >",
 
     // MSG_DIR_ROMS
-    "ROMﾌｫﾙﾀﾞ         :",
+    // ROMフォルダ
+    "ROM\x83\x74\x83\x48\x83\x8B\x83\x5F         :",
 
     // MSG_DIR_SAVE
-    "ｾｰﾌﾞﾌｫﾙﾀﾞ       :",
+    // セーブフォルダ
+    "\x83\x5A\x81\x5B\x83\x75\x83\x74\x83\x48\x83\x8B\x83\x5F       :",
 
     // MSG_DIR_STATE
-    "ｾｰﾌﾞｽﾃｰﾄ        :",
+    // セーブステート
+    "\x83\x5A\x81\x5B\x83\x75\x83\x58\x83\x65\x81\x5B\x83\x67        :",
 
     // MSG_DIR_CHEAT
-    "ﾁｰﾄﾌｫﾙﾀﾞ        :",
+    // チートフォルダ
+    "\x83\x60\x81\x5B\x83\x67\x83\x74\x83\x48\x83\x8B\x83\x5F        :",
 
     // MSG_DIR_SNAP
-    "ｽｸﾘｰﾝｼｮｯﾄ       :",
+    // スクリーンショット
+    "\x83\x58\x83\x4E\x83\x8A\x81\x5B\x83\x93\x83\x56\x83\x87\x83\x62\x83\x67       :",
 
     // MSG_HELP_SUBMENU_DIRECTORIES
-    "ﾌｧｲﾙﾊﾟｽ:ROM,ｾｰﾌﾞ,ｵｰﾊﾞｰﾚｲ  ○:ﾓﾄﾞﾙ",
+    // ファイルパス:ROM,セーブ,オーバーレイ  O:モドル
+    "\x83\x74\x83\x40\x83\x43\x83\x8B\x83\x70\x83\x58:ROM,\x83\x5A\x81\x5B\x83\x75,\x83\x49\x81\x5B\x83\x6F\x81\x5B\x83\x8C\x83\x43  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_DIR_ROMS
-    "X:ROMﾌｫﾙﾀﾞｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
+    // X:ROMフォルダヲセンタク  O:モドル
+    "X:ROM\x83\x74\x83\x48\x83\x8B\x83\x5F\x83\x90\x83\x5A\x83\x93\x83\x5E\x83\x4E  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_DIR_SAVE
-    "X:ｾｰﾌﾞﾌｫﾙﾀﾞｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
+    // X:セーブフォルダヲセンタク  O:モドル
+    "X:\x83\x5A\x81\x5B\x83\x75\x83\x74\x83\x48\x83\x8B\x83\x5F\x83\x90\x83\x5A\x83\x93\x83\x5E\x83\x4E  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_DIR_STATE
-    "X:ｾｰﾌﾞｽﾃｰﾄｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
+    // X:セーブステートヲセンタク  O:モドル
+    "X:\x83\x5A\x81\x5B\x83\x75\x83\x58\x83\x65\x81\x5B\x83\x67\x83\x90\x83\x5A\x83\x93\x83\x5E\x83\x4E  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_DIR_CHEAT
-    "X:ﾁｰﾄﾌｫﾙﾀﾞｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
+    // X:チートフォルダヲセンタク  O:モドル
+    "X:\x83\x60\x81\x5B\x83\x67\x83\x74\x83\x48\x83\x8B\x83\x5F\x83\x90\x83\x5A\x83\x93\x83\x5E\x83\x4E  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_DIR_SNAP
-    "X:ｽｸﾘｰﾝｼｮｯﾄｦｾﾝﾀｸ  ○:ﾓﾄﾞﾙ",
+    // X:スクリーンショットヲセンタク  O:モドル
+    "X:\x83\x58\x83\x4E\x83\x8A\x81\x5B\x83\x93\x83\x56\x83\x87\x83\x62\x83\x67\x83\x90\x83\x5A\x83\x93\x83\x5E\x83\x4E  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_VIDEO_BRIGHTNESS
-    "ｱｶﾙｻ             : %d",
+    // アカルサ
+    "\x83\x41\x83\x4A\x83\x8B\x83\x54             : %d",
 
     // MSG_VIDEO_CONTRAST
-    "ｺﾝﾄﾗｽﾄ           : %d",
+    // コントラスト
+    "\x83\x52\x83\x93\x83\x67\x83\x89\x83\x58\x83\x67           : %d",
 
     // MSG_VIDEO_SATURATION
-    "ｻｲﾄﾞ              : %d",
+    // サイド (彩度)
+    "\x83\x54\x83\x43\x83\x68              : %d",
 
     // MSG_VIDEO_COLORTEMP
-    "ｲﾛｵﾝﾄﾞ           : %d",
+    // イロオンド (色温度)
+    "\x83\x43\x83\x8D\x83\x49\x83\x93\x83\x68           : %d",
 
     // MSG_VIDEO_SHARPNESS
-    "ｼｬｰﾌﾟﾈｽ          : %s",
+    // シャープネス
+    "\x83\x56\x83\x83\x81\x5B\x83\x76\x83\x6C\x83\x58          : %s",
 
     // MSG_VIDEO_GRID
-    "LCDｸﾞﾘｯﾄﾞ        : %s",
+    // LCDグリッド
+    "LCD\x83\x4F\x83\x8A\x83\x62\x83\x68        : %s",
 
     // MSG_VIDEO_COLOR_R
-    "ｱｶﾌﾞｰｽﾄ          : %d",
+    // アカブースト
+    "\x83\x41\x83\x4A\x83\x75\x81\x5B\x83\x58\x83\x67          : %d",
 
     // MSG_VIDEO_COLOR_G
-    "ﾐﾄﾞﾘﾌﾞｰｽﾄ        : %d",
+    // ミドリブースト
+    "\x83\x7E\x83\x68\x83\x8A\x83\x75\x81\x5B\x83\x58\x83\x67        : %d",
 
     // MSG_VIDEO_COLOR_B
-    "ｱｵﾌﾞｰｽﾄ          : %d",
+    // アオブースト
+    "\x83\x41\x83\x49\x83\x75\x81\x5B\x83\x58\x83\x67          : %d",
 
     // MSG_HELP_SUBMENU_VIDEO
-    "ﾋﾞﾃﾞｵ:ﾋｮｳｼﾞ,ﾌｨﾙﾀ,ｶﾗｰ  ○:ﾓﾄﾞﾙ",
+    // ビデオ:ヒョウジ,フィルタ,カラー  O:モドル
+    "\x83\x72\x83\x66\x83\x49:\x83\x71\x83\x87\x83\x45\x83\x57,\x83\x74\x83\x42\x83\x8B\x83\x5E,\x83\x4A\x83\x89\x81\x5B  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_SUBMENU_PERFORMANCE
-    "ﾊﾟﾌｫｰﾏﾝｽ:ﾌﾚｰﾑｽｷｯﾌﾟ,CPU  ○:ﾓﾄﾞﾙ",
+    // パフォーマンス:フレームスキップ,CPU  O:モドル
+    "\x83\x70\x83\x74\x83\x48\x81\x5B\x83\x7D\x83\x93\x83\x58:\x83\x74\x83\x8C\x81\x5B\x83\x80\x83\x58\x83\x4C\x83\x62\x83\x76,CPU  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_SUBMENU_AUDIO
-    "ｻｳﾝﾄﾞ:ｵﾝﾘｮｳｾｯﾃｲ  ○:ﾓﾄﾞﾙ",
+    // サウンド:オンリョウセッテイ  O:モドル
+    "\x83\x54\x83\x45\x83\x93\x83\x68:\x83\x49\x83\x93\x83\x8A\x83\x87\x83\x45\x83\x5A\x83\x62\x83\x65\x83\x43  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_SUBMENU_CONTROLS
-    "ｺﾝﾄﾛｰﾙ:ﾎﾞﾀﾝﾏｯﾋﾟﾝｸﾞ  ○:ﾓﾄﾞﾙ",
+    // コントロール:ボタンマッピング  O:モドル
+    "\x83\x52\x83\x93\x83\x67\x83\x8D\x81\x5B\x83\x8B:\x83\x7B\x83\x5E\x83\x93\x83\x7D\x83\x62\x83\x73\x83\x93\x83\x4F  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_SUBMENU_SYSTEM
-    "ｼｽﾃﾑ:ｹﾞﾝｺﾞ,BIOS  ○:ﾓﾄﾞﾙ",
+    // システム:ゲンゴ,BIOS  O:モドル
+    "\x83\x56\x83\x58\x83\x65\x83\x80:\x83\x51\x83\x93\x83\x53,BIOS  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_VIDEO_BRIGHTNESS
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｱｶﾙｻ (4=ﾋｮｳｼﾞｭﾝ)  ○:ﾓﾄﾞﾙ",
+    // アカルサ (4=ヒョウジュン)  O:モドル
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":\x83\x41\x83\x4A\x83\x8B\x83\x54 (4=\x83\x71\x83\x87\x83\x45\x83\x57\x83\x85\x83\x93)  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_VIDEO_CONTRAST
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｺﾝﾄﾗｽﾄ (4=ﾋｮｳｼﾞｭﾝ)  ○:ﾓﾄﾞﾙ",
+    // コントラスト (4=ヒョウジュン)  O:モドル
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":\x83\x52\x83\x93\x83\x67\x83\x89\x83\x58\x83\x67 (4=\x83\x71\x83\x87\x83\x45\x83\x57\x83\x85\x83\x93)  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_VIDEO_SATURATION
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｻｲﾄﾞ (8=ﾋｮｳｼﾞｭﾝ)  ○:ﾓﾄﾞﾙ",
+    // サイド (8=ヒョウジュン)  O:モドル
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":\x83\x54\x83\x43\x83\x68 (8=\x83\x71\x83\x87\x83\x45\x83\x57\x83\x85\x83\x93)  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_VIDEO_COLORTEMP
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｲﾛｵﾝﾄﾞ (0=ｱﾀﾀｶ,16=ｽｽﾞ)  ○:ﾓﾄﾞﾙ",
+    // イロオンド (0=アタタカ,16=スズ)  O:モドル
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":\x83\x43\x83\x8D\x83\x49\x83\x93\x83\x68 (0=\x83\x41\x83\x5E\x83\x5E\x83\x4A,16=\x83\x58\x83\x59)  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_VIDEO_SHARPNESS
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｼｬｰﾌﾟﾈｽ (0=ｵﾌ)  ○:ﾓﾄﾞﾙ",
+    // シャープネス (0=オフ)  O:モドル
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":\x83\x56\x83\x83\x81\x5B\x83\x76\x83\x6C\x83\x58 (0=\x83\x49\x83\x74)  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_VIDEO_GRID
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":LCDｸﾞﾘｯﾄﾞ  ○:ﾓﾄﾞﾙ",
+    // LCDグリッド  O:モドル
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":LCD\x83\x4F\x83\x8A\x83\x62\x83\x68  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_HELP_VIDEO_COLOR_RGB
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｶﾗｰﾌﾞｰｽﾄ (4=ﾆｭｰﾄﾗﾙ)  ○:ﾓﾄﾞﾙ",
+    // カラーブースト (4=ニュートラル)  O:モドル
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":\x83\x4A\x83\x89\x81\x5B\x83\x75\x81\x5B\x83\x58\x83\x67 (4=\x83\x6A\x83\x85\x81\x5B\x83\x67\x83\x89\x83\x8B)  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_OPTION_MENU_HELP_0
     FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":�I��   ����",
@@ -356,7 +399,8 @@ const char *message[2][MSG_END] =
     "��:���C�����j���[",
 
     // MSG_OPTION_MENU_HELP_12
-    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":ｾｲｶｸｻ/ｾｲﾉｳ  ○:ﾓﾄﾞﾙ",
+    // セイカクサ/セイノウ  O:モドル
+    FONT_CURSOR_LEFT FONT_CURSOR_RIGHT ":\x83\x5A\x83\x43\x83\x4C\x83\x4A\x83\x58/\x83\x5A\x83\x43\x83\x6E\x83\x45  O:\x83\x82\x83\x68\x83\x8B",
 
     // MSG_STATE_MENU_DATE_FMT_0
     "%4d/%2d/%2d %-4s %2d:%02d:%02d",
