@@ -76,8 +76,10 @@
 #define PSP_BLOCK_COALESCING
 #define PSP_MAX_COALESCE_SIZE 16384
 
-// Enable cache invalidation reduction for better performance  
-#define PSP_REDUCE_CACHE_INVALIDATION
+// PSP_REDUCE_CACHE_INVALIDATION removed: skipping FLUSH_REASON_NATIVE_BRANCHING
+// flushes (3/4 or 7/8 of them) allowed the I-cache to hold stale JIT code for
+// self-modifying GBA RAM regions, causing wrong execution / random crashes.
+// Also called ticker() (RTC syscall, ~1µs) on every flush invocation.
 
 // Enable sprite rendering optimizations for better performance
 #define PSP_SPRITE_OPTIMIZATIONS
