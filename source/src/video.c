@@ -4300,6 +4300,17 @@ static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh)
 // Subtle (grid=1): 159 horizontal strips, factor ≈ 30/32 = 93.75%.
 // Full   (grid=2): same horizontal strips + 239 vertical strips, each at 87.5%.
 //   Intersections receive 87.5%×87.5% ≈ 76.6%, matching the lut24 (75%) corner target.
+//
+// Vertex cache: the line positions depend only on the display rect (dx/dy/dw/dh) and
+// option_grid. The rect changes at most once per session (when the user picks a display
+// mode), so we store the last-built parameters and skip the rebuild + D-cache flush on
+// every subsequent frame. Once flushed to main RAM, the GPU DMA can reuse the buffer
+// indefinitely without further CPU involvement.
+static u32 gvtx_nh = 0, gvtx_nv = 0;             // cached vertex counts
+static u32 gvtx_last_dx = ~0u, gvtx_last_dy = ~0u;
+static u32 gvtx_last_dw = ~0u, gvtx_last_dh = ~0u;
+static u32 gvtx_last_grid = ~0u;
+
 static void apply_grid_overlay_gu(void)
 {
   if (option_grid == 0) return;
@@ -4307,33 +4318,45 @@ static void apply_grid_overlay_gu(void)
   const u32 dx = cur_disp_dx, dy = cur_disp_dy;
   const u32 dw = cur_disp_dw, dh = cur_disp_dh;
 
+  // Rebuild vertex arrays only when the display rect or grid mode has changed.
+  if (dx != gvtx_last_dx || dy != gvtx_last_dy ||
+      dw != gvtx_last_dw || dh != gvtx_last_dh ||
+      option_grid != gvtx_last_grid)
+  {
+    gvtx_nh = 0;
+    for (u32 k = 1; k < GBA_SCREEN_HEIGHT; k++)
+    {
+      const float y = (float)(dy + (k * dh) / GBA_SCREEN_HEIGHT);
+      grid_vtx_h[gvtx_nh].x = (float)dx;        grid_vtx_h[gvtx_nh].y = y;        grid_vtx_h[gvtx_nh].z = 0.0f; gvtx_nh++;
+      grid_vtx_h[gvtx_nh].x = (float)(dx + dw); grid_vtx_h[gvtx_nh].y = y + 1.0f; grid_vtx_h[gvtx_nh].z = 0.0f; gvtx_nh++;
+    }
+    sceKernelDcacheWritebackRange(grid_vtx_h, gvtx_nh * sizeof(GridVtxF));
+
+    gvtx_nv = 0;
+    if (option_grid == 2)
+    {
+      for (u32 k = 1; k < GBA_SCREEN_WIDTH; k++)
+      {
+        const float x = (float)(dx + (k * dw) / GBA_SCREEN_WIDTH);
+        grid_vtx_v[gvtx_nv].x = x;        grid_vtx_v[gvtx_nv].y = (float)dy;        grid_vtx_v[gvtx_nv].z = 0.0f; gvtx_nv++;
+        grid_vtx_v[gvtx_nv].x = x + 1.0f; grid_vtx_v[gvtx_nv].y = (float)(dy + dh); grid_vtx_v[gvtx_nv].z = 0.0f; gvtx_nv++;
+      }
+      sceKernelDcacheWritebackRange(grid_vtx_v, gvtx_nv * sizeof(GridVtxF));
+    }
+
+    gvtx_last_dx = dx; gvtx_last_dy = dy;
+    gvtx_last_dw = dw; gvtx_last_dh = dh;
+    gvtx_last_grid = option_grid;
+  }
+
+  // Use cached counts from here on (valid whether we just rebuilt or reused).
+  const u32 nh = gvtx_nh;
+  const u32 nv = gvtx_nv;
+
   // GU FIX blend color: 8-bit per channel, uniform R=G=B so endianness doesn't matter.
   // subtle: 0xEF/0xFF ≈ 93.75% (matches grid_lut30 factor 30/32)
   // full  : 0xDF/0xFF ≈ 87.45% (matches grid_lut28 factor 28/32)
   const u32 darken = (option_grid == 1) ? 0x00EFEFEFu : 0x00DFDFDFu;
-
-  // Build horizontal line vertex pairs (top-left, bottom-right of a 1-px-tall sprite).
-  // Line k sits at the PSP row corresponding to the boundary between GBA rows k-1 and k.
-  u32 nh = 0;
-  for (u32 k = 1; k < GBA_SCREEN_HEIGHT; k++)
-  {
-    const float y = (float)(dy + (k * dh) / GBA_SCREEN_HEIGHT);
-    grid_vtx_h[nh].x = (float)dx;        grid_vtx_h[nh].y = y;       grid_vtx_h[nh].z = 0.0f; nh++;
-    grid_vtx_h[nh].x = (float)(dx + dw); grid_vtx_h[nh].y = y + 1.0f; grid_vtx_h[nh].z = 0.0f; nh++;
-  }
-  sceKernelDcacheWritebackRange(grid_vtx_h, nh * sizeof(GridVtxF));
-
-  u32 nv = 0;
-  if (option_grid == 2)
-  {
-    for (u32 k = 1; k < GBA_SCREEN_WIDTH; k++)
-    {
-      const float x = (float)(dx + (k * dw) / GBA_SCREEN_WIDTH);
-      grid_vtx_v[nv].x = x;        grid_vtx_v[nv].y = (float)dy;        grid_vtx_v[nv].z = 0.0f; nv++;
-      grid_vtx_v[nv].x = x + 1.0f; grid_vtx_v[nv].y = (float)(dy + dh); grid_vtx_v[nv].z = 0.0f; nv++;
-    }
-    sceKernelDcacheWritebackRange(grid_vtx_v, nv * sizeof(GridVtxF));
-  }
 
   // GPU pass: multiply-blend lines over the current framebuffer.
   // display_list is safe to reuse here — we've already sceGuSync'd the main render.
@@ -4372,9 +4395,9 @@ static void bitbilt_gu(void)
     // 2× pixel-double path: CPU upscales 240×160 → 480×320 into scale2x_buffer.
     // Used only for Sharp Bilinear. Grid is handled separately by apply_grid_overlay_gu().
     apply_pixel_double();
-    // Flush only the rows pixel_double_rows actually wrote.
-    sceKernelDcacheWritebackRange(scale2x_buffer,
-      pixel_double_rows * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
+    // scale2x_buffer is in uncached VRAM (0x04xxxxxx) — CPU writes bypass D-cache
+    // via write-combine, so no dcache flush is needed. sceGuTexFlush() below
+    // invalidates the GU's own texture cache, which is the only flush required.
 
     sceGuStart(GU_DIRECT, display_list);
     if (!gpu_tex_is_2x) {
@@ -4389,8 +4412,7 @@ static void bitbilt_gu(void)
   else
   {
     // Native path: GPU scales 240×160 screen_texture directly to display.
-    // No CPU touch of screen_texture — zero VRAM reads in this path.
-    sceKernelDcacheWritebackRange(screen_texture, GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
+    // screen_texture is in uncached VRAM — no dcache flush needed (same reason as above).
 
     sceGuStart(GU_DIRECT, display_list);
     if (gpu_tex_is_2x) {
