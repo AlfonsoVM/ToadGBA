@@ -2205,8 +2205,9 @@ static void render_scanline_obj_##alpha_op##_##map_space(u32 priority, u32 start
   render_scanline_dest_##alpha_op *dest_ptr;                                  \
   u8 *obj_tile_base = vram + 0x10000;                                         \
   u8 *tile_ptr;                                                               \
-  u8 obj_count = obj_priority_count[pIO_REG(REG_VCOUNT)][priority];      \
-  u8 *obj_list = obj_priority_list[pIO_REG(REG_VCOUNT)][priority];       \
+  u16 _vcount = pIO_REG(REG_VCOUNT);                                      \
+  u8 obj_count = obj_priority_count[_vcount][priority];                   \
+  u8 *obj_list = obj_priority_list[_vcount][priority];                    \
                                                                               \
   for (obj_num = 0; obj_num < obj_count; obj_num++)                           \
   {                                                                           \
@@ -2379,6 +2380,7 @@ static void order_obj(u8 video_mode)
 static void order_layers(u8 layer_flags)
 {
   s32 priority, layer_number;
+  u16 vcount = pIO_REG(REG_VCOUNT);
   layer_count = 0;
 
   for (priority = 3; priority >= 0; priority--)
@@ -2392,7 +2394,7 @@ static void order_layers(u8 layer_flags)
       }
     }
 
-    if ((obj_priority_count[pIO_REG(REG_VCOUNT)][priority] > 0) && ((layer_flags & 0x10) != 0))
+    if ((obj_priority_count[vcount][priority] > 0) && ((layer_flags & 0x10) != 0))
     {
       layer_order[layer_count] = priority | 0x04;
       layer_count++;
@@ -2726,11 +2728,11 @@ static void expand_brighten_partial_alpha(u32 *screen_src_ptr, u16 *screen_dest_
 
 #define render_condition_alpha                                                \
   (((pIO_REG(REG_BLDALPHA) & 0x1F1F) != 0x001F) &&                            \
-   ((pIO_REG(REG_BLDCNT) & 0x003F) != 0) &&                                   \
-   ((pIO_REG(REG_BLDCNT) & 0x3F00) != 0))                                     \
+   ((bldcnt & 0x003F) != 0) &&                                                 \
+   ((bldcnt & 0x3F00) != 0))                                                   \
 
 #define render_condition_fade                                                 \
-  (((pIO_REG(REG_BLDY) & 0x1F) != 0) && ((pIO_REG(REG_BLDCNT) & 0x3F) != 0))  \
+  (((pIO_REG(REG_BLDY) & 0x1F) != 0) && ((bldcnt & 0x3F) != 0))              \
 
 #define render_layers_color_effect(renderer, layer_condition, alpha_condition, fade_condition, _start, _end) \
 {                                                                             \
