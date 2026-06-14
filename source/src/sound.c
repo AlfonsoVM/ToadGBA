@@ -1058,8 +1058,6 @@ static int sound_update_thread(SceSize args, void *argp)
       sceKernelSleepThread();
 
       sound_sleep = 0;
-      // Reduced delay for faster response
-      sceKernelDelayThread(100);
       continue;
     }
 
