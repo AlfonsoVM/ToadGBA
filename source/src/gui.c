@@ -1606,6 +1606,8 @@ u32 menu(void)
   auto void menu_load_cheat_file(void);
   auto void submenu_cheats_misc(void);
 
+  auto void on_language_change(void);
+
   auto void menu_load_file(void);
   auto void browse_dir_roms(void);
   auto void browse_dir_save(void);
@@ -2287,7 +2289,7 @@ u32 menu(void)
   // ── SYSTEM SUBMENU ──────────────────────────────────────────────────────
   MenuOptionType system_options[] =
   {
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 0),
+    STRING_SELECTION_OPTION(on_language_change, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 0),
 
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_8], yes_no_options, &option_boot_mode, 2, MSG_OPTION_MENU_HELP_8, 1),
 
@@ -2457,6 +2459,139 @@ u32 menu(void)
 
 
   MAKE_MENU(main, NULL, NULL);
+
+  // Defined here so all option arrays above are in scope.
+  // Called by passive_function on the language option: updates all captured
+  // display_string pointers and value-option arrays to the new language.
+  void on_language_change(void)
+  {
+    // Update value-option arrays (choices shown when cycling)
+    yes_no_options[0]           = MSG[MSG_NO];
+    yes_no_options[1]           = MSG[MSG_YES];
+    global_yes_no_options[0]    = MSG[MSG_NO];
+    global_yes_no_options[1]    = MSG[MSG_YES];
+    enable_disable_options[0]   = MSG[MSG_DISABLED];
+    enable_disable_options[1]   = MSG[MSG_ENABLED];
+    on_off_options[0]           = MSG[MSG_OFF];
+    on_off_options[1]           = MSG[MSG_ON];
+    filter_options[0]           = MSG[MSG_OFF];
+    filter_options[1]           = MSG[MSG_ON];
+    scale_options[0]            = MSG[MSG_SCN_SCALED_NONE];
+    scale_options[1]            = MSG[MSG_SCN_SCALED_X15_GU];
+    scale_options[2]            = MSG[MSG_SCN_SCALED_X15_SW];
+    scale_options[3]            = MSG[MSG_SCN_SCALED_USER];
+    frameskip_options[0]        = MSG[MSG_AUTO];
+    frameskip_options[1]        = MSG[MSG_MANUAL];
+    frameskip_options[2]        = MSG[MSG_OFF];
+    stack_optimize_options[0]   = MSG[MSG_OFF];
+    stack_optimize_options[1]   = MSG[MSG_AUTO];
+    update_backup_options[0]    = MSG[MSG_EXITONLY];
+    update_backup_options[1]    = MSG[MSG_AUTO];
+    language_options[0]         = MSG[MSG_LANG_JAPANESE];
+    language_options[1]         = MSG[MSG_LANG_ENGLISH];
+
+    // Update display_string in main_options
+    main_options[0].display_string  = MSG[MSG_MAIN_MENU_0];
+    main_options[1].display_string  = MSG[MSG_MAIN_MENU_1];
+    main_options[2].display_string  = MSG[MSG_MAIN_MENU_2];
+    main_options[3].display_string  = MSG[MSG_MAIN_MENU_3];
+    main_options[4].display_string  = MSG[MSG_MAIN_MENU_4];
+    main_options[5].display_string  = MSG[MSG_MAIN_MENU_5];
+    main_options[6].display_string  = MSG[MSG_MAIN_MENU_6];
+    // [7] = "Saving options" — hardcoded, skip
+    main_options[8].display_string  = MSG[MSG_MAIN_MENU_CHEAT];
+    main_options[9].display_string  = MSG[MSG_MAIN_MENU_OVERLAY];
+    main_options[10].display_string = MSG[MSG_MAIN_MENU_7];
+    main_options[11].display_string = MSG[MSG_MAIN_MENU_8];
+    main_options[12].display_string = MSG[MSG_MAIN_MENU_9];
+    main_options[13].display_string = MSG[MSG_MAIN_MENU_11];
+
+    // Update display_string in emulator_options
+    emulator_options[0].display_string = MSG[MSG_SUBMENU_VIDEO];
+    emulator_options[1].display_string = MSG[MSG_SUBMENU_PERFORMANCE];
+    emulator_options[2].display_string = MSG[MSG_SUBMENU_AUDIO];
+    emulator_options[3].display_string = MSG[MSG_SUBMENU_CONTROLS];
+    emulator_options[4].display_string = MSG[MSG_SUBMENU_SYSTEM];
+    emulator_options[5].display_string = MSG[MSG_OPTION_MENU_DEFAULT];
+    emulator_options[6].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in video_options
+    video_options[0].display_string  = MSG[MSG_OPTION_MENU_0];
+    video_options[1].display_string  = MSG[MSG_OPTION_MENU_1];
+    // [2] = "Aspect Ratio: %s" — hardcoded, skip
+    video_options[3].display_string  = MSG[MSG_OPTION_MENU_2];
+    video_options[4].display_string  = MSG[MSG_OPTION_MENU_SHOW_FPS];
+    video_options[5].display_string  = MSG[MSG_OPTION_MENU_COLOR_CORRECTION];
+    video_options[6].display_string  = MSG[MSG_VIDEO_BRIGHTNESS];
+    video_options[7].display_string  = MSG[MSG_VIDEO_CONTRAST];
+    video_options[8].display_string  = MSG[MSG_VIDEO_SATURATION];
+    video_options[9].display_string  = MSG[MSG_VIDEO_COLORTEMP];
+    video_options[10].display_string = MSG[MSG_VIDEO_SHARPNESS];
+    video_options[11].display_string = MSG[MSG_VIDEO_GRID];
+    video_options[12].display_string = MSG[MSG_VIDEO_COLOR_R];
+    video_options[13].display_string = MSG[MSG_VIDEO_COLOR_G];
+    video_options[14].display_string = MSG[MSG_VIDEO_COLOR_B];
+    video_options[15].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in performance_options
+    performance_options[0].display_string = MSG[MSG_OPTION_MENU_3];
+    performance_options[1].display_string = MSG[MSG_OPTION_MENU_4];
+    performance_options[2].display_string = MSG[MSG_OPTION_MENU_5];
+    // [3] = "Compatibility: %s" — hardcoded, skip
+    performance_options[4].display_string = MSG[MSG_OPTION_MENU_7];
+    performance_options[5].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in audio_options
+    audio_options[0].display_string = MSG[MSG_OPTION_MENU_6];
+    audio_options[1].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in controls_options
+    controls_options[0].display_string = MSG[MSG_OPTION_MENU_BUTTON_MAPPING];
+    controls_options[1].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in system_options
+    system_options[0].display_string = MSG[MSG_OPTION_MENU_10];
+    system_options[1].display_string = MSG[MSG_OPTION_MENU_8];
+    system_options[2].display_string = MSG[MSG_OPTION_MENU_9];
+    system_options[3].display_string = MSG[MSG_SUBMENU_DIRECTORIES];
+    system_options[4].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in directories_options
+    directories_options[0].display_string = MSG[MSG_DIR_ROMS];
+    directories_options[1].display_string = MSG[MSG_DIR_SAVE];
+    directories_options[2].display_string = MSG[MSG_DIR_STATE];
+    directories_options[3].display_string = MSG[MSG_DIR_CHEAT];
+    directories_options[4].display_string = MSG[MSG_DIR_SNAP];
+    directories_options[5].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in gamepad_config_options
+    gamepad_config_options[0].display_string  = MSG[MSG_PAD_MENU_0];
+    gamepad_config_options[1].display_string  = MSG[MSG_PAD_MENU_1];
+    gamepad_config_options[2].display_string  = MSG[MSG_PAD_MENU_2];
+    gamepad_config_options[3].display_string  = MSG[MSG_PAD_MENU_3];
+    gamepad_config_options[4].display_string  = MSG[MSG_PAD_MENU_4];
+    gamepad_config_options[5].display_string  = MSG[MSG_PAD_MENU_5];
+    gamepad_config_options[6].display_string  = MSG[MSG_PAD_MENU_6];
+    gamepad_config_options[7].display_string  = MSG[MSG_PAD_MENU_7];
+    gamepad_config_options[8].display_string  = MSG[MSG_PAD_MENU_8];
+    gamepad_config_options[9].display_string  = MSG[MSG_PAD_MENU_9];
+    gamepad_config_options[10].display_string = MSG[MSG_PAD_MENU_10];
+    gamepad_config_options[11].display_string = MSG[MSG_PAD_MENU_11];
+    gamepad_config_options[12].display_string = MSG[MSG_PAD_MENU_12];
+
+    // Update display_string in analog_config_options
+    analog_config_options[0].display_string = MSG[MSG_A_PAD_MENU_0];
+    analog_config_options[1].display_string = MSG[MSG_A_PAD_MENU_1];
+    analog_config_options[2].display_string = MSG[MSG_A_PAD_MENU_2];
+    analog_config_options[3].display_string = MSG[MSG_A_PAD_MENU_3];
+    analog_config_options[4].display_string = MSG[MSG_A_PAD_MENU_4];
+    analog_config_options[5].display_string = MSG[MSG_A_PAD_MENU_5];
+    analog_config_options[6].display_string = MSG[MSG_A_PAD_MENU_6];
+
+    // Update savestate_options load/back entries
+    savestate_options[10].display_string = MSG[MSG_STATE_MENU_1];
+    savestate_options[11].display_string = MSG[MSG_STATE_MENU_2];
+  }
 
   // choose_menu references main_menu — must be AFTER MAKE_MENU(main)
   void choose_menu(MenuType *new_menu)
