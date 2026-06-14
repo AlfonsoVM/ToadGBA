@@ -4044,44 +4044,55 @@ static void generate_display_list(float mag)
 }
 
 // Sharpness filter — unsharp mask applied to screen_texture before GPU upload.
-// Works on the native 240x160 GBA buffer. Uses integer arithmetic only.
+// Works on the native 240×160 GBA buffer. Uses integer arithmetic only.
 // Kernel: center*weight - neighbours*(weight-256) / 256
 // strength levels: 1=subtle(288), 2=medium(384), 3=strong(512)
+//
+// Performance note: screen_texture is in PSP VRAM (0x04xxxxxx). CPU reads from
+// VRAM are uncached and slow (~100-200 cycles each). The original implementation
+// read row_dn[x] inside the inner loop — 158 rows × 238 pixels = ~37 600 slow
+// per-pixel VRAM reads on top of the memcpy reads.
+//
+// Fix: keep three line buffers (prev/curr/next) in main RAM. Before processing
+// each row, bulk-copy the next row via memcpy() (sequential VRAM reads — far
+// more efficient than scattered halfword loads). The inner loop then reads only
+// from main RAM. Total VRAM reads halve from ~75 000 scattered loads to ~38 400
+// sequential bytes via memcpy, eliminating the main source of slowdown.
 static void apply_sharpness(void)
 {
-
   if (option_sharpness == 0) return;
 
   // Weights for center pixel (neighbours weight = center - 256)
   static const u16 center_w[4] = { 256, 288, 384, 512 };
-  u32 cw = center_w[option_sharpness];  // center weight
-  u32 nw = (cw - 256) >> 2;            // neighbour weight per pixel (4 neighbours, sum must equal 256)
+  u32 cw = center_w[option_sharpness];
+  u32 nw = (cw - 256) >> 2;
 
-  // Temporary line buffers — only need prev and current
-  static u16 prev_line[256];
-  static u16 curr_line[256];
+  // Three line buffers in main RAM — inner loop never touches VRAM directly.
+  // Declared as a 2-D static so we can rotate via pointer swap (zero memcpy cost).
+  static u16 line_bufs[3][GBA_LINE_SIZE];
+  u16 *prev_line = line_bufs[0];
+  u16 *curr_line = line_bufs[1];
+  u16 *next_line = line_bufs[2];
 
-  // Copy row 0 as prev
-  memcpy(prev_line, screen_texture, GBA_SCREEN_WIDTH * sizeof(u16));
+  // Seed: copy rows 0 and 1 into prev/curr before the loop
+  memcpy(prev_line, screen_texture,                 GBA_SCREEN_WIDTH * sizeof(u16));
+  memcpy(curr_line, screen_texture + GBA_LINE_SIZE, GBA_SCREEN_WIDTH * sizeof(u16));
 
   for (u32 y = 1; y < GBA_SCREEN_HEIGHT - 1; y++)
   {
-    u16 *row     = screen_texture + y       * GBA_LINE_SIZE;
-    u16 *row_up  = screen_texture + (y - 1) * GBA_LINE_SIZE;
-    u16 *row_dn  = screen_texture + (y + 1) * GBA_LINE_SIZE;
+    u16 *row = screen_texture + y * GBA_LINE_SIZE;
 
-    memcpy(curr_line, row, GBA_SCREEN_WIDTH * sizeof(u16));
+    // Bulk-copy next row to main RAM (one memcpy instead of 238 per-pixel reads)
+    memcpy(next_line, screen_texture + (y + 1) * GBA_LINE_SIZE, GBA_SCREEN_WIDTH * sizeof(u16));
 
     for (u32 x = 1; x < GBA_SCREEN_WIDTH - 1; x++)
     {
-      u16 c  = curr_line[x];
-      u16 u  = prev_line[x];       // up
-      u16 d  = row_dn[x];          // down
-      u16 l  = curr_line[x - 1];   // left
-      u16 r  = curr_line[x + 1];   // right
+      u16 c = curr_line[x];
+      u16 u = prev_line[x];
+      u16 d = next_line[x];     // main RAM — was row_dn[x] (VRAM read per pixel)
+      u16 l = curr_line[x - 1];
+      u16 r = curr_line[x + 1];
 
-      // Process each channel in RGB555
-      // R = bits 14:10, G = bits 9:5, B = bits 4:0
       #define SHARP_CH(pix, shift, mask) \
         ({ s32 v = (s32)(((pix) >> (shift)) & (mask)) * (s32)cw \
                  - (s32)(((u)  >> (shift)) & (mask)) * (s32)nw \
@@ -4100,7 +4111,11 @@ static void apply_sharpness(void)
       row[x] = (u16)((nr << 10) | (ng << 5) | nb | 0x8000);
     }
 
-    memcpy(prev_line, curr_line, GBA_SCREEN_WIDTH * sizeof(u16));
+    // Rotate via pointer swap — zero memcpy cost; reuse prev buffer as next read target
+    u16 *tmp = prev_line;
+    prev_line = curr_line;
+    curr_line = next_line;
+    next_line = tmp;
   }
 }
 
