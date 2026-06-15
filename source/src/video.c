@@ -3842,7 +3842,7 @@ static void generate_display_list(float mag)
   */
 
   sceGuStart(GU_CALL, display_list_0);
-
+  sceGuClearColor(0);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
   vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
@@ -4070,6 +4070,7 @@ static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh)
   }
 
   sceGuStart(GU_CALL, display_list_s2x);
+  sceGuClearColor(0);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
   vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
@@ -4279,6 +4280,7 @@ static void generate_display_list_4x3(void)
   u32 dy = 0;
 
   sceGuStart(GU_CALL, display_list_0);
+  sceGuClearColor(0);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
   vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
@@ -4346,7 +4348,7 @@ static void generate_display_list_stretch(void)
   */
 
   sceGuStart(GU_CALL, display_list_0);
-
+  sceGuClearColor(0);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
   vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
@@ -4452,19 +4454,28 @@ void video_resolution_small(void)
 {
   set_gba_resolution();
 
-  sceGuStart(GU_DIRECT, display_list);
-
-  sceGuClearColor(0);
-  sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
-
   // Map filter option to GU value (GU_NEAREST=0, GU_LINEAR=1).
   // Sharp Bilinear: CPU does 2× pixel double; GU applies bilinear for the 320→272 step.
   // Nearest/Bilinear: pass directly to GU.
   u32 gu_filter = (option_screen_filter == FILTER_SHARP_BILINEAR) ? GU_LINEAR : option_screen_filter;
-  sceGuTexFilter(gu_filter, gu_filter);
 
-  sceGuFinish();
-  sceGuSync(0, GU_SYNC_FINISH);
+  // Clear BOTH PSP framebuffers before returning to gameplay. Without this,
+  // the framebuffer that was last displaying the game-selection menu retains
+  // its content in the pillarbox area (the ~59 px left/right bars for 4:3 mode).
+  // That stale content flickers through on the first 1-2 game frames because the
+  // display lists' sceGuClear only catches one buffer per frame — most visible
+  // with Sharp Bilinear in 4:3 mode.
+  u32 f;
+  for (f = 0; f < 2; f++)
+  {
+    sceGuStart(GU_DIRECT, display_list);
+    sceGuClearColor(0);
+    sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
+    sceGuTexFilter(gu_filter, gu_filter);
+    sceGuFinish();
+    sceGuSync(0, GU_SYNC_FINISH);
+    if (f == 0) flip_screen(0);
+  }
 }
 
 void set_gba_resolution(void)
