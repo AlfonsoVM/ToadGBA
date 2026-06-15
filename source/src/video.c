@@ -71,7 +71,8 @@ s32 ALIGN_DATA affine_reference_y[2];
 
 static u32 ALIGN_PSPDATA display_list[512];
 static u32 ALIGN_PSPDATA display_list_0[256];
-static u32 ALIGN_PSPDATA display_list_s2x[256]; // Sharp Bilinear call list (doubled UV)
+static u32 ALIGN_PSPDATA display_list_s2x[256];      // Sharp Bilinear: scale2x_buffer → framebuffer
+static u32 ALIGN_PSPDATA display_list_gpu_scale[256]; // Sharp Bilinear: screen_texture → scale2x_buffer (nearest)
 
 static u16 *screen_texture = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2));
 
@@ -82,12 +83,8 @@ static u16 *screen_texture = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2));
 #define SCALE2X_W          (GBA_SCREEN_WIDTH  * 2)   // 480
 #define SCALE2X_H          (GBA_SCREEN_HEIGHT * 2)   // 320
 static u16 *scale2x_buffer = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2) + (256 * 256 * 2));
-
-// Number of GBA source rows to double for Sharp Bilinear — set from the display rect's
-// dh so we skip rows that will be clipped by the PSP screen boundary (272px).
-// ceil(dh / 2) source rows produce dh doubled rows; anything beyond is never displayed.
-// Updated by generate_display_list_2x_for_rect() for Sharp Bilinear; default = full GBA height.
-static u32 pixel_double_rows = GBA_SCREEN_HEIGHT;
+// VRAM-relative offset of scale2x_buffer for sceGuDrawBuffer (GE uses offsets from VRAM base).
+#define SCALE2X_VRAM_OFFSET  (PSP_FRAME_SIZE * 2 + TEXTURE_SIZE)
 
 // Grid filter — simulates GBA LCD pixel grid
 // 0=off, 1=subtle (horizontal lines only), 2=full grid (GBA-accurate)
@@ -209,6 +206,7 @@ void set_gba_resolution(void);
 static void generate_display_list(float mag);
 static void generate_display_list_stretch(void);
 static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh);
+static void build_display_list_gpu_scale(void);
 static void bitbilt_gu(void);
 static void bitbilt_sw(void);
 
@@ -3763,6 +3761,7 @@ void init_video(int devkit_version)
   sceGuDisplay(GU_TRUE);
 
   generate_display_list(1.5);
+  build_display_list_gpu_scale();
   update_screen = bitbilt_gu;
 
   load_volume_icon(devkit_version);
@@ -3899,47 +3898,51 @@ static void generate_display_list(float mag)
 //   grid=1:  p      p       p30    p30   (subtle: odd row darkened)
 //   grid=2:  p      p28     p28    p24   (full:   odd col + odd row borders)
 //
-// Grid is no longer applied here — it is drawn as a GPU screen-space overlay
-// by apply_grid_overlay_gu() after the main render. apply_pixel_double() now
-// only handles pixel doubling for the Sharp Bilinear filter path.
-//
-// Performance note: screen_texture and scale2x_buffer are both in PSP VRAM.
-// CPU reads from VRAM are uncached (~100-200 cycles per halfword). The naive loop
-// doing src[sx] inside the inner loop costs 160×240 = 38 400 scattered reads (~17ms).
-// The old memcpy(dst_b32, dst_t32) was also VRAM→VRAM (slow read side).
-// __builtin_prefetch on an uncached VRAM address is a no-op on MIPS — removed.
-//
-// Fix: buffer each source row into main RAM with one bulk memcpy (sequential VRAM
-// read — much faster than scattered loads), compute the doubled u32 pairs entirely in
-// main RAM, then write to both VRAM destination rows via two sequential memcpy calls
-// (write-combined VRAM writes are fast). VRAM reads drop from 38 400 scattered loads
-// to 160 bulk memcpy calls of 480 bytes each.
-static void apply_pixel_double(void)
+// Pre-built GU_CALL display list: GPU nearest-neighbor upscale screen_texture (240×160)
+// → scale2x_buffer (480×320). Built once at init; called each Sharp Bilinear frame.
+// Replaces the old CPU apply_pixel_double() memcpy loop, freeing the main CPU entirely.
+// The GE has dedicated VRAM bandwidth and handles this ~10× faster than the CPU path.
+static void build_display_list_gpu_scale(void)
 {
-  // Two static main-RAM staging buffers — never touch VRAM inside the inner loop.
-  static u16 src_line[GBA_LINE_SIZE];           // source row from screen_texture
-  static u32 doubled_line[GBA_SCREEN_WIDTH];    // each pixel doubled into a u32 pair
+  u32 i;
+  Vertex *v, *vp;
 
-  for (u32 sy = 0; sy < pixel_double_rows; sy++)
+  sceGuStart(GU_CALL, display_list_gpu_scale);
+
+  sceGuDrawBuffer(GU_PSM_5551, (void *)SCALE2X_VRAM_OFFSET, SCALE2X_LINE_SIZE);
+  sceGuScissor(0, 0, SCALE2X_W, SCALE2X_H);
+
+  sceGuTexMode(GU_PSM_5551, 0, 0, GU_FALSE);
+  sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
+  sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+  sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+  sceGuDisable(GU_BLEND);
+  sceGuEnable(GU_TEXTURE_2D);
+
+  v = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
+  if (v != NULL)
   {
-    // 1. Bulk-read source row from VRAM into main RAM (one sequential memcpy)
-    memcpy(src_line, screen_texture + sy * GBA_LINE_SIZE,
-           GBA_SCREEN_WIDTH * sizeof(u16));
+    memset(v, 0, VERTEX_COUNT * sizeof(Vertex));
+    vp = v;
 
-    // 2. Compute pixel pairs entirely in main RAM (zero VRAM reads)
-    for (u32 sx = 0; sx < GBA_SCREEN_WIDTH; sx++)
+    for (i = 0; (i + SLICE) < GBA_SCREEN_WIDTH; i += SLICE)
     {
-      u32 p = (u32)src_line[sx];
-      doubled_line[sx] = (p << 16) | p;
+      vp[0].u = (u16)i;                  vp[0].v = 0;
+      vp[0].x = (u16)(i * 2);            vp[0].y = 0;
+      vp[1].u = (u16)(i + SLICE);        vp[1].v = (u16)GBA_SCREEN_HEIGHT;
+      vp[1].x = (u16)((i + SLICE) * 2);  vp[1].y = (u16)SCALE2X_H;
+      vp += 2;
     }
+    vp[0].u = (u16)i;                    vp[0].v = 0;
+    vp[0].x = (u16)(i * 2);              vp[0].y = 0;
+    vp[1].u = (u16)GBA_SCREEN_WIDTH;     vp[1].v = (u16)GBA_SCREEN_HEIGHT;
+    vp[1].x = (u16)SCALE2X_W;            vp[1].y = (u16)SCALE2X_H;
 
-    // 3. Write both destination rows via sequential main-RAM→VRAM memcpy.
-    //    Sequential writes to VRAM benefit from write-combining (fast).
-    u32 *dst_t32 = (u32 *)(scale2x_buffer + (sy * 2)     * SCALE2X_LINE_SIZE);
-    u32 *dst_b32 = (u32 *)(scale2x_buffer + (sy * 2 + 1) * SCALE2X_LINE_SIZE);
-    memcpy(dst_t32, doubled_line, GBA_SCREEN_WIDTH * sizeof(u32));
-    memcpy(dst_b32, doubled_line, GBA_SCREEN_WIDTH * sizeof(u32));
+    sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D,
+                   VERTEX_COUNT, 0, v);
   }
+
+  sceGuFinish();
 }
 
 // Sharp Bilinear companion display list: same screen rect as the current display mode,
@@ -3959,33 +3962,6 @@ static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh)
   // Save display rect so apply_grid_overlay_gu() can draw screen-space grid lines.
   cur_disp_dx = dx;  cur_disp_dy = dy;
   cur_disp_dw = dw;  cur_disp_dh = dh;
-
-  // Compute how many GBA source rows to process.
-  //
-  // The UV endpoint is always SCALE2X_H = 320 (the full doubled texture height).
-  // Whether we can skip the bottom source rows depends on the scaling mode:
-  //
-  // Zoom mode (dh > PSP_SCREEN_HEIGHT = 272):
-  //   The GPU maps UV 0..320 to dest rows 0..dh, but PSP hardware clips output
-  //   at 272 rows. The last visible dest row (271) maps to UV ≈ 271, so the GPU
-  //   never reads texture rows 272..319. We can safely skip the bottom 24 source
-  //   rows and only write the first 136 (= ceil(272/2)) source rows.
-  //
-  // All other modes (dh ≤ 272, e.g. stretch 480×272, 4:3, 1.5×):
-  //   The GPU maps UV 0..320 across dh ≤ 272 dest rows, meaning it samples UV
-  //   values all the way to SCALE2X_H. All 160 source rows must be processed.
-  if (dh > PSP_SCREEN_HEIGHT)
-  {
-    // Zoom/clip: skip source rows whose doubled rows fall beyond PSP screen height.
-    pixel_double_rows = (PSP_SCREEN_HEIGHT + 1) / 2;  // = 136
-    if (pixel_double_rows > GBA_SCREEN_HEIGHT)
-      pixel_double_rows = GBA_SCREEN_HEIGHT;
-  }
-  else
-  {
-    // All other modes: GPU samples full UV range — must write every source row.
-    pixel_double_rows = GBA_SCREEN_HEIGHT;  // = 160
-  }
 
   sceGuStart(GU_CALL, display_list_s2x);
   sceGuClearColor(0);
@@ -4132,23 +4108,34 @@ static void bitbilt_gu(void)
 {
   if (option_screen_filter == FILTER_SHARP_BILINEAR)
   {
-    // 2× pixel-double path: CPU upscales 240×160 → 480×320 into scale2x_buffer.
-    // Used only for Sharp Bilinear. Grid is handled separately by apply_grid_overlay_gu().
-    apply_pixel_double();
-    // scale2x_buffer is in uncached VRAM — CPU D-cache writeback is a no-op for
-    // uncached addresses, BUT sceKernelDcacheWritebackRange also emits a MIPS SYNC
-    // instruction that drains the CPU write buffer.  Without SYNC, the GE can start
-    // reading the texture before the last CPU stores have been committed to physical
-    // VRAM, causing visual artifacts at the bottom of the image.
-    sceKernelDcacheWritebackRange(scale2x_buffer,
-      pixel_double_rows * 2 * SCALE2X_LINE_SIZE * sizeof(u16));
+    // Two-pass GPU Sharp Bilinear:
+    //   Pass 1 (display_list_gpu_scale): GE nearest-neighbor upscale
+    //     screen_texture 240×160 → scale2x_buffer 480×320.
+    //   Pass 2 (display_list_s2x): GE bilinear render
+    //     scale2x_buffer 480×320 → framebuffer.
+    // screen_texture is in uncached VRAM; sceKernelDcacheWritebackRange emits
+    // a MIPS SYNC that drains the GBA renderer's CPU write buffer before the GE reads.
+    sceKernelDcacheWritebackRange(screen_texture,
+      GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
 
     sceGuStart(GU_DIRECT, display_list);
+
+    // Pass 1: GE writes scale2x_buffer as its framebuffer with nearest-neighbor sampling.
+    sceGuCallList(display_list_gpu_scale);
+
+    // Restore the real framebuffer as render target for Pass 2.
+    sceGuDrawBuffer(GU_PSM_5551, draw_frame, PSP_LINE_SIZE);
+    sceGuScissor(0, 0, PSP_SCREEN_WIDTH, PSP_SCREEN_HEIGHT);
     if (!gpu_tex_is_2x) {
       sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
       gpu_tex_is_2x = 1;
     }
+    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    // Flush GE texture cache: scale2x_buffer was just written as a framebuffer;
+    // without this the GE may sample stale texture rows in Pass 2.
     sceGuTexFlush();
+
+    // Pass 2: bilinear render scale2x_buffer → framebuffer.
     sceGuCallList(display_list_s2x);
     sceGuFinish();
     sceGuSync(0, GU_SYNC_FINISH);

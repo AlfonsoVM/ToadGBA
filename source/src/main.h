@@ -31,7 +31,7 @@
 // video filter type
 #define FILTER_NEAREST        0
 #define FILTER_BILINEAR       1
-#define FILTER_SHARP_BILINEAR 2   // CPU 2x pixel double + GPU bilinear for sub-integer step
+#define FILTER_SHARP_BILINEAR 2   // GPU 2x nearest upscale into buffer + GPU bilinear to screen
 
 // color correction modes
 #define COLOR_CORRECTION_OFF      0
