@@ -72,7 +72,6 @@ u32 option_brightness = BRIGHTNESS_DEFAULT;
 u32 option_contrast   = CONTRAST_DEFAULT;
 u32 option_saturation = SATURATION_DEFAULT;
 u32 option_colortemp  = COLORTEMP_DEFAULT;
-u32 option_sharpness  = SHARPNESS_DEFAULT;
 u32 option_grid       = GRID_DEFAULT;
 u32 option_color_r    = COLOR_RGB_DEFAULT;
 u32 option_color_g    = COLOR_RGB_DEFAULT;

@@ -39,12 +39,6 @@ static u8 chan_lut_b[32];
 static u8 lut_is_separable   = 0;    // 1 = use chan_lut_r/g/b instead of combined_lut
 static u8 gpu_tex_is_2x      = 0;     // 1 when GPU texture is pointing at scale2x_buffer
 
-// Sharpness — applied as a full-frame pass in bitbilt_gu before GPU upload
-// 0=off, 1=subtle, 2=medium, 3=strong
-#define SHARPNESS_MIN     0
-#define SHARPNESS_DEFAULT 0
-#define SHARPNESS_MAX     3
-
 // Forward declaration
 void rebuild_combined_lut(void);
 
@@ -3890,82 +3884,6 @@ static void generate_display_list(float mag)
   generate_display_list_2x_for_rect(dx, dy, dw, dh);
 }
 
-// Sharpness filter — unsharp mask applied to screen_texture before GPU upload.
-// Works on the native 240×160 GBA buffer. Uses integer arithmetic only.
-// Kernel: center*weight - neighbours*(weight-256) / 256
-// strength levels: 1=subtle(288), 2=medium(384), 3=strong(512)
-//
-// Performance note: screen_texture is in PSP VRAM (0x04xxxxxx). CPU reads from
-// VRAM are uncached and slow (~100-200 cycles each). The original implementation
-// read row_dn[x] inside the inner loop — 158 rows × 238 pixels = ~37 600 slow
-// per-pixel VRAM reads on top of the memcpy reads.
-//
-// Fix: keep three line buffers (prev/curr/next) in main RAM. Before processing
-// each row, bulk-copy the next row via memcpy() (sequential VRAM reads — far
-// more efficient than scattered halfword loads). The inner loop then reads only
-// from main RAM. Total VRAM reads halve from ~75 000 scattered loads to ~38 400
-// sequential bytes via memcpy, eliminating the main source of slowdown.
-static void apply_sharpness(void)
-{
-  if (option_sharpness == 0) return;
-
-  // Weights for center pixel (neighbours weight = center - 256)
-  static const u16 center_w[4] = { 256, 288, 384, 512 };
-  u32 cw = center_w[option_sharpness];
-  u32 nw = (cw - 256) >> 2;
-
-  // Three line buffers in main RAM — inner loop never touches VRAM directly.
-  // Declared as a 2-D static so we can rotate via pointer swap (zero memcpy cost).
-  static u16 line_bufs[3][GBA_LINE_SIZE];
-  u16 *prev_line = line_bufs[0];
-  u16 *curr_line = line_bufs[1];
-  u16 *next_line = line_bufs[2];
-
-  // Seed: copy rows 0 and 1 into prev/curr before the loop
-  memcpy(prev_line, screen_texture,                 GBA_SCREEN_WIDTH * sizeof(u16));
-  memcpy(curr_line, screen_texture + GBA_LINE_SIZE, GBA_SCREEN_WIDTH * sizeof(u16));
-
-  for (u32 y = 1; y < GBA_SCREEN_HEIGHT - 1; y++)
-  {
-    u16 *row = screen_texture + y * GBA_LINE_SIZE;
-
-    // Bulk-copy next row to main RAM (one memcpy instead of 238 per-pixel reads)
-    memcpy(next_line, screen_texture + (y + 1) * GBA_LINE_SIZE, GBA_SCREEN_WIDTH * sizeof(u16));
-
-    for (u32 x = 1; x < GBA_SCREEN_WIDTH - 1; x++)
-    {
-      u16 c = curr_line[x];
-      u16 u = prev_line[x];
-      u16 d = next_line[x];     // main RAM — was row_dn[x] (VRAM read per pixel)
-      u16 l = curr_line[x - 1];
-      u16 r = curr_line[x + 1];
-
-      #define SHARP_CH(pix, shift, mask) \
-        ({ s32 v = (s32)(((pix) >> (shift)) & (mask)) * (s32)cw \
-                 - (s32)(((u)  >> (shift)) & (mask)) * (s32)nw \
-                 - (s32)(((d)  >> (shift)) & (mask)) * (s32)nw \
-                 - (s32)(((l)  >> (shift)) & (mask)) * (s32)nw \
-                 - (s32)(((r)  >> (shift)) & (mask)) * (s32)nw; \
-           v >>= 8; \
-           v < 0 ? 0 : v > (s32)(mask) ? (s32)(mask) : v; })
-
-      u32 nr = SHARP_CH(c, 10, 0x1F);
-      u32 ng = SHARP_CH(c,  5, 0x1F);
-      u32 nb = SHARP_CH(c,  0, 0x1F);
-
-      #undef SHARP_CH
-
-      row[x] = (u16)((nr << 10) | (ng << 5) | nb | 0x8000);
-    }
-
-    // Rotate via pointer swap — zero memcpy cost; reuse prev buffer as next read target
-    u16 *tmp = prev_line;
-    prev_line = curr_line;
-    curr_line = next_line;
-    next_line = tmp;
-  }
-}
-
 // Sharp Bilinear: simple 2× pixel doubling 240×160 → 480×320 into scale2x_buffer.
 // Each GBA pixel becomes an exact 2×2 block — no smoothing, no rounding.
 // GPU then applies bilinear only for the sub-integer vertical step (320→272),
@@ -4212,9 +4130,6 @@ static void apply_grid_overlay_gu(void)
 
 static void bitbilt_gu(void)
 {
-  // Apply sharpness filter before handing texture to GPU
-  apply_sharpness();
-
   if (option_screen_filter == FILTER_SHARP_BILINEAR)
   {
     // 2× pixel-double path: CPU upscales 240×160 → 480×320 into scale2x_buffer.

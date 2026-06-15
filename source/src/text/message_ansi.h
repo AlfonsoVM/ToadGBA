@@ -227,9 +227,6 @@
     // MSG_VIDEO_COLORTEMP
     "Color temp      : %d",
 
-    // MSG_VIDEO_SHARPNESS
-    "Sharpness       : %s",
-
     // MSG_VIDEO_GRID
     "LCD Grid        : %s",
 
@@ -268,9 +265,6 @@
 
     // MSG_HELP_VIDEO_COLORTEMP
     "Left/Right: color temp (0=warm, 16=cool)  O:Back",
-
-    // MSG_HELP_VIDEO_SHARPNESS
-    "Left/Right: sharpness (0=off)  O:Back",
 
     // MSG_HELP_VIDEO_GRID
     "Left/Right: LCD grid overlay  O:Back",

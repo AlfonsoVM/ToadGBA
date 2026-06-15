@@ -56,11 +56,6 @@
 #define SATURATION_DEFAULT 8
 #define SATURATION_MAX     16
 
-// sharpness (0=off, 1=subtle, 2=medium, 3=strong)
-#define SHARPNESS_MIN     0
-#define SHARPNESS_DEFAULT 0
-#define SHARPNESS_MAX     3
-
 // grid filter (0=off, 1=subtle horizontal, 2=full GBA grid)
 #define GRID_MIN     0
 #define GRID_DEFAULT 0
@@ -130,7 +125,6 @@ extern u32 option_brightness;
 extern u32 option_contrast;
 extern u32 option_saturation;
 extern u32 option_colortemp;
-extern u32 option_sharpness;
 extern u32 option_grid;
 extern u32 option_color_r;
 extern u32 option_color_g;

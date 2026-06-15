@@ -2222,7 +2222,6 @@ u32 menu(void)
     option_contrast            = CONTRAST_DEFAULT;
     option_saturation          = SATURATION_DEFAULT;
     option_colortemp           = COLORTEMP_DEFAULT;
-    option_sharpness           = SHARPNESS_DEFAULT;
     option_color_r             = COLOR_RGB_DEFAULT;
     option_color_g             = COLOR_RGB_DEFAULT;
     option_color_b             = COLOR_RGB_DEFAULT;
@@ -2257,17 +2256,15 @@ u32 menu(void)
 
     NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLORTEMP], &option_colortemp, COLORTEMP_MAX + 1, MSG_HELP_VIDEO_COLORTEMP, 9),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_SHARPNESS], ((const char*[]){"Off","Subtle","Medium","Strong"}), &option_sharpness, SHARPNESS_MAX + 1, MSG_HELP_VIDEO_SHARPNESS, 10),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_GRID], ((const char*[]){"Off","Subtle","Full GBA"}), &option_grid, GRID_MAX + 1, MSG_HELP_VIDEO_GRID, 10),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_GRID], ((const char*[]){"Off","Subtle","Full GBA"}), &option_grid, GRID_MAX + 1, MSG_HELP_VIDEO_GRID, 11),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_R], &option_color_r, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 11),
 
-    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_R], &option_color_r, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 12),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_G], &option_color_g, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 12),
 
-    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_G], &option_color_g, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 13),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_B], &option_color_b, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 13),
 
-    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_B], &option_color_b, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 14),
-
-    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 15),
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 14),
   };
 
   MAKE_MENU(video, NULL, NULL);
@@ -2565,12 +2562,11 @@ u32 menu(void)
     video_options[7].display_string  = MSG[MSG_VIDEO_CONTRAST];
     video_options[8].display_string  = MSG[MSG_VIDEO_SATURATION];
     video_options[9].display_string  = MSG[MSG_VIDEO_COLORTEMP];
-    video_options[10].display_string = MSG[MSG_VIDEO_SHARPNESS];
-    video_options[11].display_string = MSG[MSG_VIDEO_GRID];
-    video_options[12].display_string = MSG[MSG_VIDEO_COLOR_R];
-    video_options[13].display_string = MSG[MSG_VIDEO_COLOR_G];
-    video_options[14].display_string = MSG[MSG_VIDEO_COLOR_B];
-    video_options[15].display_string = MSG[MSG_OPTION_MENU_11];
+    video_options[10].display_string = MSG[MSG_VIDEO_GRID];
+    video_options[11].display_string = MSG[MSG_VIDEO_COLOR_R];
+    video_options[12].display_string = MSG[MSG_VIDEO_COLOR_G];
+    video_options[13].display_string = MSG[MSG_VIDEO_COLOR_B];
+    video_options[14].display_string = MSG[MSG_OPTION_MENU_11];
 
     // Update display_string in performance_options
     performance_options[0].display_string = MSG[MSG_OPTION_MENU_3];
@@ -3207,7 +3203,7 @@ s32 save_config_file(void)
     file_options[26]  = option_contrast;
     file_options[27]  = option_saturation;
     file_options[28]  = option_colortemp;
-    file_options[29]  = option_sharpness;
+    file_options[29]  = 0; // reserved (was sharpness)
     file_options[30]  = option_grid;
     file_options[31]  = option_color_r;
     file_options[32]  = option_color_g;
@@ -3351,7 +3347,7 @@ s32 load_config_file(void)
       option_contrast   = file_options[26] % (CONTRAST_MAX   + 1);
       option_saturation = file_options[27] % (SATURATION_MAX + 1);
       option_colortemp  = file_options[28] % (COLORTEMP_MAX  + 1);
-      option_sharpness  = file_options[29] % (SHARPNESS_MAX  + 1);
+      // file_options[29] reserved (was sharpness — always ignored)
       option_grid       = file_options[30] % (GRID_MAX       + 1);
       option_color_r    = file_options[31] % (COLOR_RGB_MAX  + 1);
       option_color_g    = file_options[32] % (COLOR_RGB_MAX  + 1);
@@ -3394,7 +3390,6 @@ s32 load_config_file(void)
   option_contrast   = CONTRAST_DEFAULT;
   option_saturation = SATURATION_DEFAULT;
   option_colortemp  = COLORTEMP_DEFAULT;
-  option_sharpness  = SHARPNESS_DEFAULT;
   option_grid       = GRID_DEFAULT;
   option_button_mapping = 0;  // Default to X/O mapping
   option_resume_on_boot = 0;  // Default to Off
