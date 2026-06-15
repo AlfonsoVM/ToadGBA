@@ -261,6 +261,8 @@ char dir_snap[MAX_PATH];
 char dir_cheat[MAX_PATH];//cheat
 char dir_overlay[MAX_PATH];//overlay
 
+static char dir_disp[5][80];
+
 u32 menu_cheat_page = 0;
 
 // Overlay variables
@@ -789,6 +791,7 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
     // Add recent games to the file list first (with "★ " prefix)
     // Only show recent games when browsing for ROM files (based on file extension)
     int is_rom_browsing = 0;
+    int is_dir_mode = (!wildcards || !wildcards[0]);
     if (wildcards && wildcards[0]) {
       // Check if we're looking for ROM extensions
       for (int w = 0; wildcards[w]; w++) {
@@ -960,9 +963,15 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
 
 	  // Help text reflects current button mapping
       {
-        const char *browser_help = (option_button_mapping == 0)
-          ? "O:Select  X:Menu  Square:Up Dir"
-          : "X:Select  O:Menu  Square:Up Dir";
+        const char *browser_help;
+        if (is_dir_mode)
+          browser_help = (option_button_mapping == 0)
+            ? "O:Enter  X:Confirm Dir  Square:Up"
+            : "X:Enter  O:Confirm Dir  Square:Up";
+        else
+          browser_help = (option_button_mapping == 0)
+            ? "O:Select  X:Menu  Square:Up Dir"
+            : "X:Select  O:Menu  Square:Up Dir";
         print_string(browser_help, 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
       }
 
@@ -1385,6 +1394,26 @@ static void save_dir_ini_entry(const char *ini_key, const char *new_dir)
     for (int k = 0; k < nlines; k++)
       fputs(lines[k], f);
     fclose(f);
+  }
+}
+
+// Refresh the Directories submenu display strings to show label + current path.
+// Static (non-nested) so it is safe to call from nested functions on PSP/MIPS.
+static void update_dir_displays(MenuOptionType *opts)
+{
+  static const u32 dir_msgs[5] = {
+    MSG_DIR_ROMS, MSG_DIR_SAVE, MSG_DIR_STATE, MSG_DIR_CHEAT, MSG_DIR_SNAP
+  };
+  char *dir_ptrs[5] = { dir_roms, dir_save, dir_state, dir_cheat, dir_snap };
+  u32 k;
+  for (k = 0; k < 5; k++) {
+    const char *label = MSG[dir_msgs[k]];
+    const char *path  = dir_ptrs[k];
+    u32 plen = (u32)strlen(path);
+    const char *short_path = (plen > 13) ? path + plen - 13 : path;
+    const char *dots       = (plen > 13) ? "..." : "";
+    snprintf(dir_disp[k], 80, "%s %s%s", label, dots, short_path);
+    opts[k].display_string = dir_disp[k];
   }
 }
 
@@ -2293,6 +2322,7 @@ u32 menu(void)
   };
 
   MAKE_MENU(directories, NULL, NULL);
+  update_dir_displays(directories_options);
 
   // ── SYSTEM SUBMENU ──────────────────────────────────────────────────────
   MenuOptionType system_options[] =
@@ -2572,6 +2602,7 @@ u32 menu(void)
     directories_options[3].display_string = MSG[MSG_DIR_CHEAT];
     directories_options[4].display_string = MSG[MSG_DIR_SNAP];
     directories_options[5].display_string = MSG[MSG_OPTION_MENU_11];
+    update_dir_displays(directories_options);
 
     // Update display_string in gamepad_config_options
     gamepad_config_options[0].display_string  = MSG[MSG_PAD_MENU_0];
@@ -2833,7 +2864,11 @@ u32 menu(void)
 
           case ACTION_OPTION:
             if (current_option->action_function != NULL)
+            {
               current_option->action_function();
+              if (current_menu == &directories_menu)
+                update_dir_displays(directories_menu.options);
+            }
             else
             {
               // Handle menu actions inline to avoid corrupted function pointers
