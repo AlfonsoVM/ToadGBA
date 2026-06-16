@@ -72,7 +72,6 @@ s32 ALIGN_DATA affine_reference_y[2];
 static u32 ALIGN_PSPDATA display_list[512];
 static u32 ALIGN_PSPDATA display_list_0[256];
 static u32 ALIGN_PSPDATA display_list_s2x[256];      // Sharp Bilinear: scale2x_buffer → framebuffer
-static u32 ALIGN_PSPDATA display_list_gpu_scale[256]; // Sharp Bilinear: screen_texture → scale2x_buffer (nearest)
 
 static u16 *screen_texture = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2));
 
@@ -206,7 +205,6 @@ void set_gba_resolution(void);
 static void generate_display_list(float mag);
 static void generate_display_list_stretch(void);
 static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh);
-static void build_display_list_gpu_scale(void);
 static void bitbilt_gu(void);
 static void bitbilt_sw(void);
 
@@ -3761,7 +3759,6 @@ void init_video(int devkit_version)
   sceGuDisplay(GU_TRUE);
 
   generate_display_list(1.5);
-  build_display_list_gpu_scale();
   update_screen = bitbilt_gu;
 
   load_volume_icon(devkit_version);
@@ -3898,53 +3895,6 @@ static void generate_display_list(float mag)
 //   grid=1:  p      p       p30    p30   (subtle: odd row darkened)
 //   grid=2:  p      p28     p28    p24   (full:   odd col + odd row borders)
 //
-// Pre-built GU_CALL display list: GPU nearest-neighbor upscale screen_texture (240×160)
-// → scale2x_buffer (480×320). Built once at init; called each Sharp Bilinear frame.
-// Replaces the old CPU apply_pixel_double() memcpy loop, freeing the main CPU entirely.
-// The GE has dedicated VRAM bandwidth and handles this ~10× faster than the CPU path.
-static void build_display_list_gpu_scale(void)
-{
-  u32 i;
-  Vertex *v, *vp;
-
-  sceGuStart(GU_CALL, display_list_gpu_scale);
-
-  sceGuDrawBuffer(GU_PSM_5551, (void *)SCALE2X_VRAM_OFFSET, SCALE2X_LINE_SIZE);
-  sceGuScissor(0, 0, SCALE2X_W, SCALE2X_H);
-
-  sceGuTexMode(GU_PSM_5551, 0, 0, GU_FALSE);
-  sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
-  sceGuTexFilter(GU_NEAREST, GU_NEAREST);
-  sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
-  sceGuDisable(GU_BLEND);
-  sceGuEnable(GU_TEXTURE_2D);
-
-  v = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
-  if (v != NULL)
-  {
-    memset(v, 0, VERTEX_COUNT * sizeof(Vertex));
-    vp = v;
-
-    for (i = 0; (i + SLICE) < GBA_SCREEN_WIDTH; i += SLICE)
-    {
-      vp[0].u = (u16)i;                  vp[0].v = 0;
-      vp[0].x = (u16)(i * 2);            vp[0].y = 0;
-      vp[1].u = (u16)(i + SLICE);        vp[1].v = (u16)GBA_SCREEN_HEIGHT;
-      vp[1].x = (u16)((i + SLICE) * 2);  vp[1].y = (u16)SCALE2X_H;
-      vp += 2;
-    }
-    vp[0].u = (u16)i;                    vp[0].v = 0;
-    vp[0].x = (u16)(i * 2);              vp[0].y = 0;
-    vp[1].u = (u16)GBA_SCREEN_WIDTH;     vp[1].v = (u16)GBA_SCREEN_HEIGHT;
-    vp[1].x = (u16)SCALE2X_W;            vp[1].y = (u16)SCALE2X_H;
-
-    sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D,
-                   VERTEX_COUNT, 0, v);
-  }
-
-  sceGuFinish();
-}
-
 // Sharp Bilinear companion display list: same screen rect as the current display mode,
 // but UV coordinates are doubled (u=0..480, v=0..320) to map scale2x_buffer correctly.
 //
@@ -4108,30 +4058,56 @@ static void bitbilt_gu(void)
 {
   if (option_screen_filter == FILTER_SHARP_BILINEAR)
   {
+    u32 i;
+    Vertex *v, *vp;
+
     // Two-pass GPU Sharp Bilinear:
-    //   Pass 1 (display_list_gpu_scale): GE nearest-neighbor upscale
-    //     screen_texture 240×160 → scale2x_buffer 480×320.
-    //   Pass 2 (display_list_s2x): GE bilinear render
-    //     scale2x_buffer 480×320 → framebuffer.
-    // screen_texture is in uncached VRAM; sceKernelDcacheWritebackRange emits
-    // a MIPS SYNC that drains the GBA renderer's CPU write buffer before the GE reads.
+    //   Pass 1: GE nearest-neighbor upscale screen_texture 240×160 → scale2x_buffer 480×320.
+    //   Pass 2 (display_list_s2x): GE bilinear render scale2x_buffer 480×320 → framebuffer.
+    //
+    // Pass 1 is built inline as a GU_DIRECT submission so the draw-buffer change is
+    // handled by the normal GU_DIRECT dispatch path.  Using a pre-built GU_CALL list
+    // for a render-to-texture pass is non-standard on PSP and caused double-image
+    // artifacts; every PSP render-to-texture example uses a dedicated GU_DIRECT submission.
     sceKernelDcacheWritebackRange(screen_texture,
       GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
 
     // Pass 1: GE nearest-neighbor upscale screen_texture → scale2x_buffer.
-    // Must be a SEPARATE submission from Pass 2. sceGuTexFlush() within a single
-    // display list is not sufficient — the GE rasterizer and texture unit can
-    // pipeline such that the texture unit reads scale2x_buffer before the
-    // rasterizer finishes writing it. sceGuSync() guarantees all writes are
-    // committed to VRAM before Pass 2 reads scale2x_buffer as a texture.
     sceGuStart(GU_DIRECT, display_list);
-    sceGuCallList(display_list_gpu_scale);
+    sceGuDrawBuffer(GU_PSM_5551, (void *)SCALE2X_VRAM_OFFSET, SCALE2X_LINE_SIZE);
+    sceGuScissor(0, 0, SCALE2X_W, SCALE2X_H);
+    sceGuTexMode(GU_PSM_5551, 0, 0, GU_FALSE);
+    sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuDisable(GU_BLEND);
+    sceGuEnable(GU_TEXTURE_2D);
+
+    v = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
+    if (v != NULL)
+    {
+      memset(v, 0, VERTEX_COUNT * sizeof(Vertex));
+      vp = v;
+      for (i = 0; (i + SLICE) < GBA_SCREEN_WIDTH; i += SLICE)
+      {
+        vp[0].u = (u16)i;                  vp[0].v = 0;
+        vp[0].x = (u16)(i * 2);            vp[0].y = 0;
+        vp[1].u = (u16)(i + SLICE);        vp[1].v = (u16)GBA_SCREEN_HEIGHT;
+        vp[1].x = (u16)((i + SLICE) * 2);  vp[1].y = (u16)SCALE2X_H;
+        vp += 2;
+      }
+      vp[0].u = (u16)i;                    vp[0].v = 0;
+      vp[0].x = (u16)(i * 2);              vp[0].y = 0;
+      vp[1].u = (u16)GBA_SCREEN_WIDTH;     vp[1].v = (u16)GBA_SCREEN_HEIGHT;
+      vp[1].x = (u16)SCALE2X_W;            vp[1].y = (u16)SCALE2X_H;
+
+      sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D,
+                     VERTEX_COUNT, 0, v);
+    }
     sceGuFinish();
     sceGuSync(0, GU_SYNC_FINISH);
 
     // Pass 2: bilinear render scale2x_buffer → framebuffer.
-    // display_list_gpu_scale left the draw buffer pointing at scale2x_buffer and
-    // the texture pointing at screen_texture — restore both before the final render.
     sceGuStart(GU_DIRECT, display_list);
     sceGuDrawBuffer(GU_PSM_5551, draw_frame, PSP_LINE_SIZE);
     sceGuScissor(0, 0, PSP_SCREEN_WIDTH, PSP_SCREEN_HEIGHT);
