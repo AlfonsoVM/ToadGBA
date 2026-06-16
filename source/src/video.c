@@ -4118,24 +4118,27 @@ static void bitbilt_gu(void)
     sceKernelDcacheWritebackRange(screen_texture,
       GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
 
+    // Pass 1: GE nearest-neighbor upscale screen_texture → scale2x_buffer.
+    // Must be a SEPARATE submission from Pass 2. sceGuTexFlush() within a single
+    // display list is not sufficient — the GE rasterizer and texture unit can
+    // pipeline such that the texture unit reads scale2x_buffer before the
+    // rasterizer finishes writing it. sceGuSync() guarantees all writes are
+    // committed to VRAM before Pass 2 reads scale2x_buffer as a texture.
     sceGuStart(GU_DIRECT, display_list);
-
-    // Pass 1: GE writes scale2x_buffer as its framebuffer with nearest-neighbor sampling.
     sceGuCallList(display_list_gpu_scale);
+    sceGuFinish();
+    sceGuSync(0, GU_SYNC_FINISH);
 
-    // Restore the real framebuffer as render target for Pass 2.
+    // Pass 2: bilinear render scale2x_buffer → framebuffer.
+    // display_list_gpu_scale left the draw buffer pointing at scale2x_buffer and
+    // the texture pointing at screen_texture — restore both before the final render.
+    sceGuStart(GU_DIRECT, display_list);
     sceGuDrawBuffer(GU_PSM_5551, draw_frame, PSP_LINE_SIZE);
     sceGuScissor(0, 0, PSP_SCREEN_WIDTH, PSP_SCREEN_HEIGHT);
-    // Always re-issue: display_list_gpu_scale sets the texture to screen_texture
-    // every frame, so we must restore it to scale2x_buffer unconditionally here.
     sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
     gpu_tex_is_2x = 1;
     sceGuTexFilter(GU_LINEAR, GU_LINEAR);
-    // Flush GE texture cache: scale2x_buffer was just written as a framebuffer;
-    // without this the GE may sample stale texture rows in Pass 2.
     sceGuTexFlush();
-
-    // Pass 2: bilinear render scale2x_buffer → framebuffer.
     sceGuCallList(display_list_s2x);
     sceGuFinish();
     sceGuSync(0, GU_SYNC_FINISH);
