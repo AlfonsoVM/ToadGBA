@@ -4126,10 +4126,10 @@ static void bitbilt_gu(void)
     // Restore the real framebuffer as render target for Pass 2.
     sceGuDrawBuffer(GU_PSM_5551, draw_frame, PSP_LINE_SIZE);
     sceGuScissor(0, 0, PSP_SCREEN_WIDTH, PSP_SCREEN_HEIGHT);
-    if (!gpu_tex_is_2x) {
-      sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
-      gpu_tex_is_2x = 1;
-    }
+    // Always re-issue: display_list_gpu_scale sets the texture to screen_texture
+    // every frame, so we must restore it to scale2x_buffer unconditionally here.
+    sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
+    gpu_tex_is_2x = 1;
     sceGuTexFilter(GU_LINEAR, GU_LINEAR);
     // Flush GE texture cache: scale2x_buffer was just written as a framebuffer;
     // without this the GE may sample stale texture rows in Pass 2.
