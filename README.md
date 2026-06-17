@@ -1,7 +1,8 @@
 # ToadGBA — TempGBA/FrogGBA mod by AlfonsoVM
 
-> **ToadGBA** is a fork of [FrogGBA](https://github.com/tzubertowski/FrogGBA) for PSP,
-> focused on visual quality, GPU-accelerated filters, and correctness fixes.
+> **ToadGBA** is a fork of [FrogGBA](https://github.com/tzubertowski/FrogGBA) for PSP.
+> It extends FrogGBA's color correction and aspect ratio work with GPU-accelerated
+> filters, deeper image controls, and a range of correctness and performance fixes.
 
 ## Download & Installation
 ![ToadGBA Icon](source/res/ICON0.png)
@@ -16,71 +17,125 @@ You need custom firmware (CFW) on your PSP.
 
 ---
 
-## What's New (v1.0)
+## What ToadGBA adds over FrogGBA
 
-### For Players
+### Visual filters
+- **Sharp Bilinear filter** — two-pass GPU filter: nearest-neighbor 2× upscale into an
+  intermediate buffer, then bilinear scaling to the display. Crisp pixels at any scale,
+  zero CPU cost. (FrogGBA had no sharpening filter.)
+- **LCD grid filter** — simulates the GBA pixel grid (Off / Subtle / Full GBA), rendered
+  entirely on the GPU as a screen-space overlay.
 
-- **Sharp Bilinear filter** — combines a GPU 2× pixel-doubling pass with bilinear
-  scaling to the display. Games look crisp at any aspect ratio, with no CPU cost.
-- **LCD grid filter** — optional pixel-grid overlay that simulates the GBA screen
-  (Off / Subtle horizontal lines / Full GBA grid). Rendered entirely on GPU.
-- **Color correction modes** — GPSP, Retro, AGS-101, LCD Dim, and Off.
-  Optimized with per-channel lookup tables; negligible performance impact.
-- **Brightness, contrast, saturation, color temperature, RGB controls** — full
-  image tuning from the in-game menu.
-- **4:3 pillarbox, Zoom, and Stretch aspect ratios** — in addition to the native
-  3:2 GBA ratio.
-- **Custom overlay/bezel system** — load PNG borders as `.ovl` files.
-  Full-screen support, X/Y offset, RLE compression for complex designs.
-- **Recent Games list** — last 10 played titles shown at the top of the file browser.
+### New color modes
+- **AGS-101** — replicates the backlit GBA SP screen.
+- **LCD Dim** — simulates the original dark GBA LCD.
+  (FrogGBA had GPSP and Retro modes; AGS-101 and LCD Dim are ToadGBA additions.)
+
+### Extended image controls
+- Brightness, **Contrast**, **Saturation**, **Color Temperature**, and
+  **per-channel RGB gain** — all tunable from the menu with LUT-based rendering
+  so there is no per-frame CPU cost.
+
+### New aspect ratio
+- **4:3 pillarbox** — displays the GBA image at exact 4:3 proportions with black bars,
+  no distortion. (FrogGBA had Core/3:2, Zoom, and Stretch.)
+
+### Frameskip
 - **SMART frameskip mode** — predictive frameskip with a debt accumulator that
-  eliminates the 30 FPS oscillation caused by the old reactive-only AUTO mode.
-- **Fast-forward** — SELECT + R toggles 2×/3× speed.
-- **Show current directory** in the Directories menu.
-- **Numerous crash and stability fixes** — startup crash without a game loaded,
-  language-switch crashes, file-browser crashes, save/load state guards, and more.
+  eliminates the 30 FPS oscillation found in FrogGBA's reactive AUTO mode.
 
-### Performance Highlights
+### Browser
+- **Show current directory** in the Directories menu path display.
 
-- **GPU Sharp Bilinear** frees the CPU from the old `apply_pixel_double()` memcpy
-  loop (~384 KB of CPU-driven VRAM bandwidth per frame). The GE does the same work
-  in a fraction of the time.
-- **Targeted dcache flushes** — replaced the blanket `DcacheWritebackAll()` calls
-  with `sceKernelDcacheWritebackRange()` scoped to the exact texture region.
-- **GBC stereo panning fix** and **timer prescale fix** improve audio accuracy and
-  stability in games that use timers 2–3.
-- **Removed `PSP_REDUCE_CACHE_INVALIDATION`** — the JIT stale-code bug it masked
-  caused random glitches; removing it improved correctness without a speed cost.
-- **64 MB RAM mode** on PSP Slim (PSP-2000/3000/Go) for extra JIT cache headroom.
+### Performance fixes
+- Replaced full `DcacheWritebackAll()` flushes with targeted
+  `sceKernelDcacheWritebackRange()` scoped to the exact texture region.
+- Removed `PSP_REDUCE_CACHE_INVALIDATION` — it masked a JIT stale-code bug.
+- Removed JIT cache pre-warm at startup (no-op on PSP uncached VRAM).
+- Replaced per-sample ring-buffer loop in `fill_sound_buffer()` with a
+  two-segment `memcpy` approach.
+- Reordered `obj_priority_list` from `[priority][scanline]` to
+  `[scanline][priority]` for sequential access in the hot rendering loop.
+- Eliminated redundant IO register reads in per-scanline hotpaths.
+- Replaced per-pixel VRAM write loops with `u32`-pair writes and `memcpy`.
+- LUT-based color correction hot path (u32 pairs, per-channel LUTs, prefetch).
+
+### Bug fixes
+- **Timer prescale corruption** — `timer_control_low()` read the old prescale before
+  the write for timers 2–3, corrupting audio in games using cascaded timers.
+- **GBC stereo panning** — left/right channels were swapped in `RENDER_SAMPLE_BOTH`.
+- **Sound thread wakeup delay** — removed a stale 100 µs sleep after thread wake.
+- **`affine_render_scale_pixel` tile-pointer cache** — the cache was nullified at
+  the end of each cached iteration, negating the optimization.
+- **`psp_fclose` stale handle** — the caller's handle was not zeroed after close,
+  enabling use-after-close.
+- **Write-buffer SYNC** — restored the CPU write-buffer drain before GE texture reads
+  to prevent the GE racing a partially-written frame.
+- **Sharp Bilinear menu flicker** in pillarbox mode.
+
+### Dead code removal
+- Scale2x filter (CPU-heavy, replaced by Sharp Bilinear).
+- CPU sharpness filter (per-pixel VRAM reads, too slow on PSP).
+- Incomplete layer-merge system (slower than baseline in all tests).
+- `cpu_common.c` (duplicate of `cpu.c` definitions).
+- `PSP_REDUCE_CACHE_INVALIDATION` flag (masked a correctness bug).
+- JIT pre-warm at startup (no effect on uncached VRAM).
+- `-funsafe-loop-optimizations` from CFLAGS (risks silent mis-compilation).
+
+---
+
+## Inherited from FrogGBA
+
+The following features were already present in FrogGBA and are included unchanged
+(or with minor fixes) in ToadGBA.
+
+### Overlay system
+- Full-screen PNG bezel/border support via `.ovl` files.
+- RLE compression for pixel-dense designs.
+- X/Y offset controls to reposition the game window.
+- Up to 10 overlay slots, switchable from the menu.
+- Online converter at [toadgba.onrender.com](https://toadgba.onrender.com).
+
+### Performance
+- **gpSP Kai engine optimizations** — static translation caches, reduced cache
+  invalidation, optimized tile rendering pipeline.
+- **Multi-layer Mode 0 fix** — 4-layer rendering bottleneck resolved; Castlevania
+  water sections went from 15–20 FPS to 30+ FPS.
+- **Memory management** — 2 MB ROM cache, 256 KB RAM cache.
+- **Volatile memory support** — uses extra PSP RAM on all models.
+
+### Color correction
+- GPSP mode and Retro mode with optimized lookup tables.
+
+### Aspect ratio modes
+- Core (3:2 GBA native), Zoom (fill screen vertically), Stretch (fill 480×272).
+
+### Quality of life
+- Recent Games menu (last 10 played titles).
+- Fast-forward (SELECT + R, 2×/3× speed).
+- Turbo buttons (Triangle and Square).
+- ROM validation before load.
+- Clean exit (no BSOD on emulator quit).
+- Save/load state with auto menu close and file validation.
+- FPS display toggle (SELECT + Square).
 
 ---
 
 ## Acknowledgements
 
-ToadGBA builds on the work of many people across the GBA emulation community:
+ToadGBA stands on the shoulders of:
 
 - **[gpSP](https://github.com/HACKERCHANNEL/gpsp)** by *Exophase* — the original
-  GBA emulator for PSP that started it all.
-- **[gpSP Kai](https://github.com/uofw/gpsp)** by *takka* — the definitive PSP
-  performance and compatibility fork that proved what the hardware could do.
+  GBA emulator for PSP and the foundation for everything that followed.
+- **[gpSP Kai](https://github.com/uofw/gpsp)** by *takka* — the definitive
+  performance and compatibility fork that pushed PSP GBA emulation to its limits.
 - **[TempGBA](https://github.com/Nebuleon/TempGBA)** by *Nebuleon*, *Normmatt*,
-  and *BassAceGold* — the base layer ToadGBA ultimately rests on.
-- **TempGBA4PSP-mod** (TempGBA4PSP-26731020) — additional patches incorporated
-  into TempGBA.
+  and *BassAceGold*, and **TempGBA4PSP-mod** — the codebase both FrogGBA and
+  ToadGBA are built on.
 - **[FrogGBA](https://github.com/tzubertowski/FrogGBA)** by *tzubertowski* — the
-  direct parent of ToadGBA; added AGS-101/LCD-Dim color modes, brightness control,
-  and 4:3 pillarbox before this fork diverged.
-
----
-
-## Original TempGBA Features
-
-- gpSP Kai cheats support
-- Chinese language support
-- Restore function
-- New menu icon
-- TempGBA-mod-dstwo patches
-- Modern PSP SDK / Docker build system
+  direct parent of ToadGBA; contributed the overlay system, gpSP Kai engine
+  integration, color correction (GPSP/Retro), aspect ratio modes (Core/Zoom/Stretch),
+  Recent Games menu, and stability fixes that ToadGBA builds on.
 
 ---
 
@@ -108,9 +163,6 @@ memory card.
 ---
 
 ## Technical Notes for Developers
-
-This section documents every significant change made to the codebase since the
-FrogGBA fork, with enough context to understand the "why" behind each decision.
 
 ### Sharp Bilinear Filter (GPU, two-pass)
 
@@ -145,31 +197,27 @@ VRAM 0x4000000
   + 0xA8000  scale2x_buffer  (512×320×2 = 0x50000)
 ```
 
-`scale2x_buffer` is declared with stride 512 so the GE can treat it as a
-512×512 power-of-two texture in Pass 2. `sceGuTexImage(0, 512, 512, 512, ...)`.
+`scale2x_buffer` has stride 512 so the GE can address it as a 512×512
+power-of-two texture in Pass 2: `sceGuTexImage(0, 512, 512, 512, ...)`.
 
 **Why `GU_DIRECT`, not `GU_CALL`, for Pass 1:**
 
-An earlier version pre-built Pass 1 as a static `GU_CALL` list
-(`display_list_gpu_scale`) built once at init. This caused a persistent
-double-image/flicker artifact. The root cause: `sceGuDrawBuffer()` inside a
-`GU_CALL` sub-list is non-standard on PSP. All PSP render-to-texture examples
-in the wild use a dedicated `GU_DIRECT` submission for the write-to-offscreen
-pass, not a `GU_CALL`. Moving Pass 1 inline into `bitbilt_gu()` as a
+An earlier version pre-built Pass 1 as a static `GU_CALL` list built once at
+init. This caused a persistent double-image/flicker artifact. The root cause:
+`sceGuDrawBuffer()` inside a `GU_CALL` sub-list is non-standard on PSP — every
+PSP render-to-texture example uses a dedicated `GU_DIRECT` submission for the
+write-to-offscreen pass. Moving Pass 1 inline into `bitbilt_gu()` as a
 `GU_DIRECT` list fixed the artifact completely.
-
-Pass 1 rebuilds 8 vertex structs (80 bytes) each frame via `sceGuGetMemory`
-— negligible cost compared to the eliminated CPU memcpy.
 
 **Screen-texture dcache flush:**
 
-Before Pass 1 the code calls:
 ```c
 sceKernelDcacheWritebackRange(screen_texture,
     GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
 ```
-This emits a MIPS SYNC that drains the GBA renderer's CPU write buffer before
-the GE DMA reads `screen_texture`. Without it the GE can race the CPU and read
+
+Emits a MIPS SYNC that drains the GBA renderer's CPU write buffer before the
+GE DMA reads `screen_texture`. Without it the GE can race the CPU and display
 a partially-written frame.
 
 ---
@@ -179,170 +227,97 @@ a partially-written frame.
 The grid filter draws darkened horizontal (and optionally vertical) strips over
 the framebuffer in PSP screen space, simulating a GBA LCD pixel grid.
 
-**Implementation:**
-
-- Pre-built `GU_CALL` list (`display_list_grid`) containing a strip of thin
-  `GU_SPRITES` quads covering the display rectangle.
-- Rendered with `GU_BLEND` multiply mode so it darkens what's already in the
-  framebuffer without a separate readback.
-- Grid vertices are cached and only rebuilt on display-mode change, so there is
-  zero per-frame CPU cost beyond the GE submission itself.
-- The old implementation ran as a CPU per-pixel loop over VRAM — replaced
-  entirely with the GPU path.
+Pre-built `GU_CALL` list containing thin `GU_SPRITES` quads covering the display
+rectangle, rendered with `GU_BLEND` multiply mode. Vertices are cached and only
+rebuilt on display-mode change — zero per-frame CPU cost. The old implementation
+was a CPU per-pixel VRAM loop.
 
 ---
 
 ### Color Correction (LUT-based hot path)
 
-Color correction converts RGB555 pixels from `screen_texture` to the target
-color profile. Three-tier approach:
+Three-tier approach applied during `apply_pixel_double()`:
 
-1. **u32-pair inner loop** — processes two adjacent pixels per iteration using
-   a single 32-bit read/write, halving memory bandwidth.
-2. **Per-channel LUTs** — 32-entry lookup tables (one per RGB channel) pre-built
-   at mode-change time. The LUTs encode brightness, contrast, saturation,
-   color temperature, and per-channel gain in a single indexed lookup, collapsing
-   what would be 6–8 arithmetic ops per pixel into 3 table lookups.
+1. **u32-pair inner loop** — two adjacent pixels per iteration, halving memory
+   bandwidth.
+2. **Per-channel LUTs** — 32-entry tables (one per RGB channel) encoding
+   brightness, contrast, saturation, color temperature, and per-channel gain in
+   a single indexed lookup (3 table reads instead of 6–8 arithmetic ops per pixel).
 3. **Prefetch** — `__builtin_prefetch` on the next pixel pair keeps the LUT hot
    in L1 cache.
 
-The combined LUT is rebuilt by `rebuild_color_lut()` whenever any color option
-changes; per-frame cost is zero.
+The combined LUT is rebuilt by `rebuild_color_lut()` on any option change;
+per-frame cost is zero.
 
 ---
 
 ### Targeted dcache Flushes
 
-Replaced `sceKernelDcacheWritebackAll()` (full dcache flush) with
-`sceKernelDcacheWritebackRange(ptr, size)` scoped to exactly the texture region
-the GE needs. On PSP the dcache is 16 KB; a full flush evicts working data
-from the JIT and audio paths, adding measurable overhead every frame.
+Replaced `sceKernelDcacheWritebackAll()` with `sceKernelDcacheWritebackRange()`
+scoped to the exact texture region. The PSP dcache is 16 KB; a full flush evicts
+JIT and audio working data every frame.
 
 ---
 
 ### PSP_REDUCE_CACHE_INVALIDATION Removed
 
-This compile flag reduced JIT cache invalidation aggressiveness, which hid a
-bug where stale translated code could be executed after ROM data changed.
-Removing it restored correct invalidation behavior. The performance regression
-was negligible in practice — the flag was only valuable when paired with a
-larger JIT cache, which TempGBA's allocation did not provide.
-
----
-
-### JIT Cache Pre-Warm Removed
-
-At startup ToadGBA used to call a function that touched every JIT cache entry
-to "pre-warm" TLB entries. On PSP the JIT cache resides in uncached VRAM, so
-TLB warming has no effect — the reads were pure wasted bus bandwidth.
+This flag reduced JIT cache invalidation aggressiveness to hide a stale-code bug.
+Removing it restored correct invalidation. The performance cost was negligible
+since the flag was only effective paired with a larger JIT cache than TempGBA
+allocated.
 
 ---
 
 ### Timer Prescale Fix (Timers 2–3)
 
-`timer_control_low()` read `timer_prescale[timer_number]` before the write that
-updated it, then stored the old value back. For timers 2 and 3 this corrupted
-the prescale setting on every write, causing audio drift in games that use
-cascaded timers for sample-rate generation. Fixed by storing the prescale only
-after reading the new value from the register.
+`timer_control_low()` read `timer_prescale[n]` before the write that updated it,
+then stored the old value back. For timers 2 and 3 this corrupted the prescale
+on every write, causing audio drift in games with cascaded timers. Fixed by
+storing the prescale only after reading the new register value.
 
 ---
 
 ### GBC Stereo Panning Fix
 
-`RENDER_SAMPLE_BOTH` in `sound.c` was applying left and right panning to the
-wrong channels (left gain on right output and vice versa). Fixed by matching the
-channel index to the correct output side.
-
----
-
-### Sound Thread Wakeup Delay Removed
-
-`fill_sound_buffer()` waited 100 µs after waking the audio thread before
-returning. This delay was a defensive workaround for a race that no longer
-exists after the buffer management was rewritten. Removing it reduces audio
-latency by one scheduler tick per buffer cycle.
+`RENDER_SAMPLE_BOTH` applied left gain to the right output and right gain to the
+left output. Fixed by matching channel index to the correct output side.
 
 ---
 
 ### `fill_sound_buffer()` Linear-Segment Rewrite
 
-The old implementation iterated the ring buffer one sample at a time, calling
-`memcpy` in a per-sample loop. Replaced with a two-segment approach that
-computes the contiguous regions of the ring buffer and issues at most two
-`memcpy` calls per fill. Reduces function-call overhead significantly for large
-buffers.
+Replaced a per-sample ring-buffer loop with a two-segment approach that computes
+the contiguous regions and issues at most two `memcpy` calls per fill.
 
 ---
 
 ### `obj_priority_list` Cache-Locality Fix
 
-OBJ scanline data was stored as `[priority][scanline]`. The hot rendering loop
-iterates by scanline first, so access was striding across 160 rows × 4 bytes
-for each priority level — cache-unfriendly. Transposed to `[scanline][priority]`
-so the inner loop is sequential.
-
----
-
-### Redundant IO Register Read Elimination
-
-Several per-scanline rendering functions read the same IO registers multiple
-times per call (BG scroll, affine parameters, etc.). Hoisted reads to
-locals at the top of each function. Reduces register pressure and eliminates
-repeated uncached VRAM reads in the hottest path of the emulator.
-
----
-
-### VRAM Write Optimization (u32-pair + memcpy)
-
-Inner loops that wrote pixels to VRAM one `u16` at a time were replaced with
-`u32`-pair writes (two pixels per store) where alignment permits, and with
-`memcpy` for full scanline copies. On PSP the VRAM write bus is 32-bit wide;
-pairing writes doubles effective throughput.
-
----
-
-### SMART Frameskip
-
-The original AUTO frameskip mode was purely reactive: it compared the previous
-frame's real time against the VBlank period and skipped the next frame if behind.
-This produced a visible 30 FPS oscillation (skip → catch up → skip → ...).
-
-SMART mode adds a **debt accumulator**: excess time beyond the threshold
-accumulates and is paid off gradually over multiple frames rather than triggering
-a skip on every late frame. The result is smoother pacing at the same average
-frame rate.
+Transposed from `[priority][scanline]` to `[scanline][priority]` so the hot
+rendering loop (which iterates by scanline) accesses memory sequentially.
 
 ---
 
 ### `affine_render_scale_pixel` Tile-Pointer Cache Fix
 
-This function cached `tile_ptr` across calls to avoid re-computing the tile
-address on consecutive pixels of the same tile. A logic error caused the cached
-value to be overwritten with `NULL` at the end of the first cached iteration,
-nullifying the optimization on the very next call. Fixed by preserving the
+The cached `tile_ptr` was overwritten with `NULL` at the end of each cached
+iteration, nullifying the cache on the very next call. Fixed by preserving the
 pointer until the tile index actually changes.
 
 ---
 
 ### `psp_fclose` Handle Nulling
 
-`psp_fclose()` closed the file but did not set `*filename_tag = -1` afterward.
-Any code that checked the handle after close would see a stale valid-looking
-value and attempt a double-close or use-after-close. Fixed by zeroing the
-caller's handle unconditionally after `sceIoClose`.
+`psp_fclose()` did not set `*filename_tag = -1` after closing. Any code that
+checked the handle afterward saw a stale valid-looking value and could
+double-close or use-after-close. Fixed by zeroing the caller's handle
+unconditionally.
 
 ---
 
-### Dead Code Removal
+### SMART Frameskip
 
-- **`cpu_common.c`** — duplicate of definitions already in `cpu.c`; removed.
-- **Layer-merge system** — an incomplete multi-layer merge optimization that
-  measured slower than the baseline renderer in all tested configurations; removed.
-- **`-funsafe-loop-optimizations`** — a GCC flag that can silently mis-compile
-  loops with pointer aliasing; removed from `CFLAGS`.
-- **Scale2x filter** — the software Scale2x upscaler was retained briefly but
-  removed because it was CPU-heavy and visually inferior to Sharp Bilinear on
-  the PSP screen. Sharp Bilinear covers the same use case on GPU.
-- **Sharpness filter** — a per-pixel CPU sharpening pass; removed because the
-  per-pixel VRAM read pattern was too expensive on PSP.
+AUTO mode compared the previous frame's real time against the VBlank period and
+skipped the next frame if behind — producing a 30 FPS oscillation (skip → catch
+up → skip ...). SMART mode adds a debt accumulator: excess latency is paid off
+gradually over multiple frames rather than triggering a skip immediately.
