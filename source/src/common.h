@@ -45,6 +45,7 @@
 
 #define MAX_PATH (512)
 #define MAX_FILE (256)
+#define MAX_OVERLAYS (10)
 
 #define ALIGN_PSPDATA __attribute__((aligned(16)))
 #define ALIGN_DATA    __attribute__((aligned(4)))
@@ -75,8 +76,10 @@
 #define PSP_BLOCK_COALESCING
 #define PSP_MAX_COALESCE_SIZE 16384
 
-// Enable cache invalidation reduction for better performance  
-#define PSP_REDUCE_CACHE_INVALIDATION
+// PSP_REDUCE_CACHE_INVALIDATION removed: skipping FLUSH_REASON_NATIVE_BRANCHING
+// flushes (3/4 or 7/8 of them) allowed the I-cache to hold stale JIT code for
+// self-modifying GBA RAM regions, causing wrong execution / random crashes.
+// Also called ticker() (RTC syscall, ~1µs) on every flush invocation.
 
 // Enable sprite rendering optimizations for better performance
 #define PSP_SPRITE_OPTIMIZATIONS
@@ -87,8 +90,9 @@
 // Enable memory optimization (skip waitstates for performance)
 #define PSP_MEMORY_OPTIMIZATIONS
 
-// Enable timer prescaling optimizations
-#define PSP_TIMER_OPTIMIZATIONS
+// PSP_TIMER_OPTIMIZATIONS removed: halving the prescale shift for timers 2-3
+// (prescale_table[2]=8 >> 1 = 4) made them run ~16x faster than real hardware,
+// corrupting audio timing in games that use timer 2/3 cascades for music.
 #endif
 
 // Performance vs accuracy tradeoff levels
@@ -112,7 +116,7 @@
   ((filename_tag) >= 0)                                                       \
 
 #define FILE_CLOSE(filename_tag)                                              \
-  psp_fclose(filename_tag)                                                    \
+  psp_fclose(&(filename_tag))                                                 \
 
 #define FILE_READ(filename_tag, buffer, size)                                 \
   sceIoRead(filename_tag, buffer, size)                                       \

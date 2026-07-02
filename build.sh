@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# FrogGBA Build Script
-# This script compiles the FrogGBA emulator for PSP
+# ToadGBA Build Script
+# This script compiles the ToadGBA emulator for PSP
 
 set -e  # Exit on any error
 
-echo "=== FrogGBA Build Script ==="
+echo "=== ToadGBA Build Script ==="
 echo "Setting up PSP development environment..."
 
 # Set PSP development environment variables
@@ -29,7 +29,7 @@ echo "PSP DEV path: $PSPDEV"
 # Navigate to source directory
 cd source
 
-echo "=== Building FrogGBA ==="
+echo "=== Building ToadGBA ==="
 echo "Cleaning previous build..."
 make clean || true
 
@@ -37,18 +37,18 @@ echo "Starting compilation..."
 make
 
 # Check if build was successful
-if [ -f "FrogGBA.prx" ] && [ -f "EBOOT.PBP" ]; then
+if [ -f "ToadGBA.prx" ] && [ -f "EBOOT.PBP" ]; then
     echo "=== BUILD SUCCESSFUL ==="
     echo "Generated files:"
-    ls -la FrogGBA.prx EBOOT.PBP
+    ls -la ToadGBA.prx EBOOT.PBP
     
     # Create output directory
     mkdir -p ../build
-    cp FrogGBA.prx ../build/
+    cp ToadGBA.prx ../build/
     cp EBOOT.PBP ../build/
     
     echo "Build artifacts copied to build/ directory"
-    echo "You can now copy EBOOT.PBP to your PSP's PSP/GAME/FrogGBA/ folder"
+    echo "You can now copy EBOOT.PBP to your PSP's PSP/GAME/ToadGBA/ folder"
 else
     echo "=== BUILD FAILED ==="
     echo "Expected output files not found"

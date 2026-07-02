@@ -1,6 +1,6 @@
-# FrogGBA Build Instructions
+# ToadGBA Build Instructions
 
-This repository includes Docker setup files to build the FrogGBA emulator for PlayStation Portable.
+This repository includes Docker setup files to build the ToadGBA emulator for PlayStation Portable.
 
 ## Files
 
@@ -28,10 +28,10 @@ docker-compose up --build
 
 ```bash
 # Build the Docker image
-docker build -t froggba-psp .
+docker build -t toadgba-psp .
 
 # Run the container and compile
-docker run --rm -v $(pwd):/project froggba-psp /project/build.sh
+docker run --rm -v $(pwd):/project toadgba-psp /project/build.sh
 
 # The compiled files will be in the build/ directory
 ```
@@ -50,12 +50,12 @@ docker-compose run --rm psp-dev /bin/bash
 
 If successful, you'll find these files in the `build/` directory:
 
-- `FrogGBA.prx` - The compiled PSP module
+- `ToadGBA.prx` - The compiled PSP module
 - `EBOOT.PBP` - The PSP executable file
 
 ## Installation on PSP
 
-1. Copy `EBOOT.PBP` to your PSP's `PSP/GAME/FrogGBA/` folder
+1. Copy `EBOOT.PBP` to your PSP's `PSP/GAME/ToadGBA/` folder
 2. Place GBA ROM files in the same directory
 3. Launch from the PSP's Game menu
 

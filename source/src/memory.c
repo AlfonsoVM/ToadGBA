@@ -3473,14 +3473,11 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
             {
               iwram_stack_optimize = 0;
             }
-/*
             if (!strcasecmp(current_variable, "flash_rom_type") && !strcasecmp(current_value, "128KB"))
             {
               flash_device_id = FLASH_DEVICE_MACRONIX_128KB;
             }
 
-            // DBZLGCYGOKU2 �Υץ��ƥ��Ȼر�
-            // EEPROM_V124���������(�F���Єe����) ��ָ������Є�����
             if (!strcasecmp(current_variable, "save_type"))
             {
               if (!strcasecmp(current_value, "sram"))
@@ -3492,7 +3489,6 @@ static s32 load_game_config(char *gamepak_title, char *gamepak_code, char *gamep
               if (!strcasecmp(current_value, "eeprom"))
                 backup_type = BACKUP_EEPROM;
             }
-*/
             if (!strcasecmp(current_variable, "bios_rom_hack_39") &&
                 !strcasecmp(current_value, "yes"))
             {
@@ -3589,12 +3585,6 @@ static s32 load_gamepak_raw(char *name)
 
 s32 load_gamepak(char *name)
 {
-  FILE *debug_log = fopen("froggba_debug.log", "a");
-  if (debug_log) {
-    fprintf(debug_log, "load_gamepak: Starting to load game: %s\n", name);
-    fclose(debug_log);
-  }
-
   // Save the original full path for lastPlayed before any processing
   char original_full_path[MAX_PATH];
   strcpy(original_full_path, name);
@@ -3686,14 +3676,8 @@ s32 load_gamepak(char *name)
   scePowerUnlock(0);
 
   // Save the last played game with the original full path
-  if (file_size >= 0) {
-    FILE *debug_log = fopen("froggba_debug.log", "a");
-    if (debug_log) {
-      fprintf(debug_log, "load_gamepak: Saving last played game with full path: %s\n", original_full_path);
-      fclose(debug_log);
-    }
+  if (file_size >= 0)
     save_last_played_game(original_full_path);
-  }
 
   return file_size;
 
@@ -3734,16 +3718,10 @@ void load_state(char *savestate_filename)
   sprintf(savestate_path, "%s%s", dir_state, savestate_filename);
 
   // Temporarily free overlay memory to make room for save state operations
-  extern void free_overlay_memory(void);
-  extern void load_overlay(const char *filename);
-  extern u32 option_overlay_enabled;
-  extern u32 option_overlay_selected;
-  extern char overlay_names[10][64];
   int need_restore_overlay = 0;
   char saved_overlay_name[64] = {0};
-  
+
   // Free overlay memory if any overlay is loaded (not just if enabled)
-  extern int overlay_loaded;
   if (overlay_loaded || (option_overlay_enabled && option_overlay_selected > 0)) {
     if (option_overlay_selected > 0 && option_overlay_selected < 10) {
       strcpy(saved_overlay_name, overlay_names[option_overlay_selected]);
@@ -3805,16 +3783,10 @@ void save_state(char *savestate_filename, u16 *screen_capture)
   sprintf(savestate_path, "%s%s", dir_state, savestate_filename);
 
   // Temporarily free overlay memory to make room for save state buffer
-  extern void free_overlay_memory(void);
-  extern void load_overlay(const char *filename);
-  extern u32 option_overlay_enabled;
-  extern u32 option_overlay_selected;
-  extern char overlay_names[10][64];
   int need_restore_overlay = 0;
   char saved_overlay_name[64] = {0};
-  
+
   // Free overlay memory if any overlay is loaded (not just if enabled)
-  extern int overlay_loaded;
   if (overlay_loaded || (option_overlay_enabled && option_overlay_selected > 0)) {
     if (option_overlay_selected > 0 && option_overlay_selected < 10) {
       strcpy(saved_overlay_name, overlay_names[option_overlay_selected]);
@@ -3962,7 +3934,6 @@ void save_auto_resume_state(void)
   char savestate_ext[16];
   
   // Only save if auto save/load is enabled
-  extern u32 option_auto_save_state;
   if (option_auto_save_state == 0) {
     return;
   }

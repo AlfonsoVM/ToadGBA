@@ -1,0 +1,35 @@
+# Force LF line endings for all files that run inside Docker/Linux
+# Prevents CRLF issues when cloning on Windows
+
+* text=auto
+
+# Shell scripts must always use LF — CRLF breaks the shebang interpreter
+*.sh text eol=lf
+
+# Makefiles are whitespace-sensitive and must use LF
+Makefile text eol=lf
+*.mk text eol=lf
+
+# Docker files must use LF
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf
+
+# C source files — LF for consistency
+*.c text eol=lf
+*.h text eol=lf
+*.S text eol=lf
+
+# Config and text files
+*.md text eol=lf
+*.txt text eol=lf
+*.cfg text eol=lf
+*.ini text eol=lf
+
+# Binary files — no line ending conversion
+*.png binary
+*.pbp binary
+*.prx binary
+*.elf binary
+*.bin binary
+*.ovl binary
+*.zip binary

@@ -23,9 +23,24 @@
 #include "volume_icon.c"
 
 // Optimized color correction lookup tables (dynamically allocated)
-static u16 *gpsp_color_lut = NULL;
-static u16 *retro_color_lut = NULL;
+static u16 *gpsp_color_lut   = NULL;
+static u16 *retro_color_lut  = NULL;
+static u16 *agb101_color_lut = NULL;  // GBA SP AGS-101 backlit screen
+static u16 *lcd_dim_lut      = NULL;  // Original GBA unlit LCD
+static u16 *combined_lut     = NULL;  // Merged color+brightness LUT (single scanline pass)
 static u8 color_luts_initialized = 0;
+static u8 lut_is_identity    = 0;     // 1 when combined_lut is identity (all settings neutral)
+// Per-channel LUTs: 32 bytes each (~6 cache lines total), stay hot across all 160 scanlines.
+// Active when adjustments are channel-separable (no saturation, no color correction, no RGB boost).
+// Covers the common "just tweaked brightness/contrast/colortemp" case without 64 KB LUT thrash.
+static u8 chan_lut_r[32];
+static u8 chan_lut_g[32];
+static u8 chan_lut_b[32];
+static u8 lut_is_separable   = 0;    // 1 = use chan_lut_r/g/b instead of combined_lut
+static u8 gpu_tex_is_2x      = 0;     // 1 when GPU texture is pointing at scale2x_buffer
+
+// Forward declaration
+void rebuild_combined_lut(void);
 
 // Global function pointers
 void (*update_screen)(void);
@@ -56,8 +71,76 @@ s32 ALIGN_DATA affine_reference_y[2];
 
 static u32 ALIGN_PSPDATA display_list[512];
 static u32 ALIGN_PSPDATA display_list_0[256];
+static u32 ALIGN_PSPDATA display_list_s2x[256];      // Sharp Bilinear: scale2x_buffer → framebuffer
 
 static u16 *screen_texture = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2));
+
+// Sharp Bilinear output buffer in VRAM, right after screen_texture (256*256*2 bytes).
+// Stride = 512 so GU can treat it as a 512×512 power-of-2 texture.
+// Content: 480×320 pixels (GBA 240×160 scaled ×2 in both axes).
+#define SCALE2X_LINE_SIZE  512
+#define SCALE2X_W          (GBA_SCREEN_WIDTH  * 2)   // 480
+#define SCALE2X_H          (GBA_SCREEN_HEIGHT * 2)   // 320
+static u16 *scale2x_buffer = (u16 *)(0x4000000 + (PSP_FRAME_SIZE * 2) + (256 * 256 * 2));
+// VRAM-relative offset of scale2x_buffer for sceGuDrawBuffer (GE uses offsets from VRAM base).
+#define SCALE2X_VRAM_OFFSET  (PSP_FRAME_SIZE * 2 + TEXTURE_SIZE)
+
+// Grid filter — simulates GBA LCD pixel grid
+// 0=off, 1=subtle (horizontal lines only), 2=full grid (GBA-accurate)
+#define GRID_MIN     0
+#define GRID_DEFAULT 0
+#define GRID_MAX     2
+
+// Per-channel darkening LUTs — 32 bytes each (fit in one cache line each, stay hot).
+// lut[i] = floor(i * factor / 32) for i = 0..31.
+// 192 KB of full-pixel LUTs eliminated — random pixel access no longer causes cache thrash.
+static const u8 grid_lut30[32] = { // factor 30/32 ≈ 94% (subtle row)
+   0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11,12,13,14,
+  15,16,17,17,18,19,20,21,22,23,24,25,26,27,28,29
+};
+static const u8 grid_lut28[32] = { // factor 28/32 = 87.5% (edge)
+   0, 0, 1, 2, 3, 3, 5, 6, 7, 7, 8, 9,10,10,12,13,
+  14,14,15,16,17,18,19,19,21,22,23,23,24,25,26,27
+};
+static const u8 grid_lut24[32] = { // factor 24/32 = 75% (corner)
+   0, 0, 1, 2, 3, 3, 4, 5, 6, 6, 7, 8, 9, 9,10,11,
+  12,12,13,14,15,15,16,17,18,18,19,20,21,21,22,23
+};
+
+// Darken an RGB555 pixel using a per-channel LUT. 3 table reads + 2 shifts + OR.
+// All three LUTs fit in ~6 cache lines and stay hot across an entire frame.
+#define GRID_DARKEN(px, lut) \
+  ((u32)(lut[((px) >> 10) & 0x1F] << 10) | \
+   (u32)(lut[((px) >>  5) & 0x1F] <<  5) | \
+   (u32)(lut[( px)        & 0x1F]       ) | 0x8000u)
+
+// Grid overlay — drawn as a GPU pass directly on the PSP framebuffer in screen space.
+//
+// Previous approach (pixel_double): CPU read screen_texture (VRAM, slow) and wrote a
+// darkened 480×320 buffer. GPU then bilinearly scaled this down to the display height,
+// blurring the alternating dark/normal rows into an almost uniform result → subtle lines
+// invisible, and significant CPU overhead reading VRAM.
+//
+// Current approach: after the main screen render, issue a second GU pass that draws
+// 1-px-tall horizontal strips (and optional vertical strips) at the GBA row/column
+// boundaries in PSP screen-space coordinates. A multiply-blend (GU_FIX src=0, dst=factor)
+// darkens only the covered pixels without any CPU reads of screen_texture. Lines are at
+// exact PSP framebuffer resolution regardless of display mode, and the GPU workload is
+// trivial (~159 sprites). Zero CPU VRAM reads.
+
+// Current display rectangle — set once per mode-change in generate_display_list_2x_for_rect
+// so apply_grid_overlay_gu() knows where to draw screen-space lines.
+static u32 cur_disp_dx = 0;
+static u32 cur_disp_dy = 0;
+static u32 cur_disp_dw = PSP_SCREEN_WIDTH;
+static u32 cur_disp_dh = PSP_SCREEN_HEIGHT;
+
+// Vertex buffers for grid-overlay sprites. Pre-allocated in BSS (not inside the display
+// list) to avoid overflowing the 512-word display_list buffer with vertex data.
+// Float positions (GU_VERTEX_32BITF) sidestep s16-struct padding concerns.
+typedef struct { float x, y, z; } GridVtxF;
+static ALIGN_PSPDATA GridVtxF grid_vtx_h[2 * GBA_SCREEN_HEIGHT];  // horizontal lines
+static ALIGN_PSPDATA GridVtxF grid_vtx_v[2 * GBA_SCREEN_WIDTH];   // vertical lines
 
 void *disp_frame;
 void *draw_frame;
@@ -96,8 +179,8 @@ const u8 ALIGN_DATA obj_height_table[] =
   8, 16, 32, 64, 8, 8, 16, 32, 16, 32, 32, 64
 };
 
-u8 ALIGN_DATA obj_priority_list[5][160][128];
-u8 ALIGN_DATA obj_priority_count[5][160];
+u8 ALIGN_DATA obj_priority_list[160][5][128];
+u8 ALIGN_DATA obj_priority_count[160][5];
 u8 ALIGN_DATA obj_alpha_count[160];
 
 
@@ -111,20 +194,6 @@ u16 tile_base_bg_control[4] = {0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF};
 // Fast path tile rendering for common cases
 u32 fast_path_enabled = 0;  // DISABLED - may contribute to blending issues
 
-// Layer merging system for static background optimization
-#define MAX_LAYER_CACHE_FRAMES 4
-typedef struct {
-  u16 *composite_buffer;        // Pre-rendered layer composite 
-  u32 static_frame_count;       // Frames this layer has been static
-  u32 last_bg_control;          // Last BG control register value
-  u32 last_scroll_x;            // Last horizontal scroll
-  u32 last_scroll_y;            // Last vertical scroll
-  u8 is_static;                 // 1 if layer is considered static
-  u8 needs_update;              // 1 if cache needs refresh
-} layer_cache_t;
-
-static layer_cache_t layer_cache[4];
-static u32 layer_merge_enabled = 0;  // DISABLED - testing if this affects blending
 
 const u8 ALIGN_DATA active_layers[8] =
 {
@@ -135,6 +204,7 @@ const u8 ALIGN_DATA active_layers[8] =
 void set_gba_resolution(void);
 static void generate_display_list(float mag);
 static void generate_display_list_stretch(void);
+static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh);
 static void bitbilt_gu(void);
 static void bitbilt_sw(void);
 
@@ -1204,7 +1274,6 @@ render_scanline_text_builder(transparent, alpha);
     tile_ptr = tile_base + (map_base[map_offset] * 64);                       \
     last_map_offset = map_offset;                                             \
   }                                                                           \
-  tile_ptr = tile_base + (map_base[(pixel_x / 8)] * 64);                      \
   current_pixel = tile_ptr[(pixel_x % 8)];                                    \
   tile_8bpp_draw_##combine_op(0, none, 0, alpha_op);                          \
   affine_render_next(combine_op);                                             \
@@ -2126,8 +2195,9 @@ static void render_scanline_obj_##alpha_op##_##map_space(u32 priority, u32 start
   render_scanline_dest_##alpha_op *dest_ptr;                                  \
   u8 *obj_tile_base = vram + 0x10000;                                         \
   u8 *tile_ptr;                                                               \
-  u8 obj_count = obj_priority_count[priority][pIO_REG(REG_VCOUNT)];      \
-  u8 *obj_list = obj_priority_list[priority][pIO_REG(REG_VCOUNT)];       \
+  u16 _vcount = pIO_REG(REG_VCOUNT);                                      \
+  u8 obj_count = obj_priority_count[_vcount][priority];                   \
+  u8 *obj_list = obj_priority_list[_vcount][priority];                    \
                                                                               \
   for (obj_num = 0; obj_num < obj_count; obj_num++)                           \
   {                                                                           \
@@ -2198,80 +2268,6 @@ u32 get_video_mode(void) {
   return current_video_mode;
 }
 
-// Layer merging functions
-void init_layer_cache(void) {
-  u32 i;
-  for (i = 0; i < 4; i++) {
-    layer_cache[i].composite_buffer = NULL;
-    layer_cache[i].static_frame_count = 0;
-    layer_cache[i].last_bg_control = 0xFFFF;
-    layer_cache[i].last_scroll_x = 0xFFFF;
-    layer_cache[i].last_scroll_y = 0xFFFF;
-    layer_cache[i].is_static = 0;
-    layer_cache[i].needs_update = 1;
-  }
-}
-
-u32 check_layer_static(u32 layer) {
-  u32 bg_control = pIO_REG(REG_BG0CNT + layer);
-  u32 scroll_x = pIO_REG(REG_BG0HOFS + (layer << 1));
-  u32 scroll_y = pIO_REG(REG_BG0VOFS + (layer << 1));
-  
-  layer_cache_t *cache = &layer_cache[layer];
-  
-  // Check if layer settings changed
-  if (cache->last_bg_control != bg_control || 
-      cache->last_scroll_x != scroll_x ||
-      cache->last_scroll_y != scroll_y) {
-    // Layer changed, reset static counter
-    cache->static_frame_count = 0;
-    cache->is_static = 0;
-    cache->needs_update = 1;
-    cache->last_bg_control = bg_control;
-    cache->last_scroll_x = scroll_x;
-    cache->last_scroll_y = scroll_y;
-    return 0;
-  }
-  
-  // Layer unchanged, increment static counter
-  cache->static_frame_count++;
-  if (cache->static_frame_count >= MAX_LAYER_CACHE_FRAMES) {
-    cache->is_static = 1;
-  }
-  
-  return cache->is_static;
-}
-
-void render_static_layers_composite(u32 start_layer, u32 end_layer, u16 *dest_buffer, u16 dispcnt) {
-  // Render multiple static layers into a single composite buffer
-  // This replaces multiple separate layer render calls
-  
-  u32 layer_order_pos;
-  u8 current_layer;
-  u16 bldcnt = pIO_REG(REG_BLDCNT);
-  TileLayerRenderStruct *layer_renderers = tile_mode_renderers[dispcnt & 0x07];
-  
-  // Clear composite buffer first
-  u32 i;
-  for (i = 0; i < 240; i++) {
-    dest_buffer[i] = palette_ram[0];  // Background color
-  }
-  
-  // Render each static layer in order
-  for (layer_order_pos = start_layer; layer_order_pos <= end_layer; layer_order_pos++) {
-    if (layer_order_pos >= layer_count) break;
-    
-    current_layer = layer_order[layer_order_pos];
-    if ((current_layer & 0x04) != 0) continue; // Skip OBJ layers
-    
-    // Only render if this layer is marked as static
-    if (!layer_cache[current_layer].is_static) continue;
-    
-    // Render this layer directly to composite buffer  
-    // Use base rendering (non-transparent) for static layers
-    layer_renderers[current_layer].normal_render_base(current_layer, 0, 240, dest_buffer);
-  }
-}
 
 static void order_obj(u8 video_mode)
 {
@@ -2285,7 +2281,7 @@ static void order_obj(u8 video_mode)
   u16 *oam_ptr = oam_ram + 508;
 
   // Use simple memset clearing - sprite optimization may affect blending
-  memset(obj_priority_count, 0, 5 * 160);
+  memset(obj_priority_count, 0, sizeof(obj_priority_count));
   memset(obj_alpha_count, 0, 160);
 
   for (obj_num = 127; obj_num >= 0; obj_num--, oam_ptr -= 4)
@@ -2347,9 +2343,9 @@ static void order_obj(u8 video_mode)
           {
             for (row = obj_y; row < obj_y + obj_height; row++)
             {
-              current_count = obj_priority_count[obj_priority][row];
-              obj_priority_list[obj_priority][row][current_count] = obj_num;
-              obj_priority_count[obj_priority][row] = current_count + 1;
+              current_count = obj_priority_count[row][obj_priority];
+              obj_priority_list[row][obj_priority][current_count] = obj_num;
+              obj_priority_count[row][obj_priority] = current_count + 1;
               obj_alpha_count[row] = 1;
             }
           }
@@ -2360,9 +2356,9 @@ static void order_obj(u8 video_mode)
 
             for (row = obj_y; row < obj_y + obj_height; row++)
             {
-              current_count = obj_priority_count[obj_priority][row];
-              obj_priority_list[obj_priority][row][current_count] = obj_num;
-              obj_priority_count[obj_priority][row] = current_count + 1;
+              current_count = obj_priority_count[row][obj_priority];
+              obj_priority_list[row][obj_priority][current_count] = obj_num;
+              obj_priority_count[row][obj_priority] = current_count + 1;
             }
           }
         }
@@ -2374,6 +2370,7 @@ static void order_obj(u8 video_mode)
 static void order_layers(u8 layer_flags)
 {
   s32 priority, layer_number;
+  u16 vcount = pIO_REG(REG_VCOUNT);
   layer_count = 0;
 
   for (priority = 3; priority >= 0; priority--)
@@ -2387,7 +2384,7 @@ static void order_layers(u8 layer_flags)
       }
     }
 
-    if ((obj_priority_count[priority][pIO_REG(REG_VCOUNT)] > 0) && ((layer_flags & 0x10) != 0))
+    if ((obj_priority_count[vcount][priority] > 0) && ((layer_flags & 0x10) != 0))
     {
       layer_order[layer_count] = priority | 0x04;
       layer_count++;
@@ -2721,11 +2718,11 @@ static void expand_brighten_partial_alpha(u32 *screen_src_ptr, u16 *screen_dest_
 
 #define render_condition_alpha                                                \
   (((pIO_REG(REG_BLDALPHA) & 0x1F1F) != 0x001F) &&                            \
-   ((pIO_REG(REG_BLDCNT) & 0x003F) != 0) &&                                   \
-   ((pIO_REG(REG_BLDCNT) & 0x3F00) != 0))                                     \
+   ((bldcnt & 0x003F) != 0) &&                                                 \
+   ((bldcnt & 0x3F00) != 0))                                                   \
 
 #define render_condition_fade                                                 \
-  (((pIO_REG(REG_BLDY) & 0x1F) != 0) && ((pIO_REG(REG_BLDCNT) & 0x3F) != 0))  \
+  (((pIO_REG(REG_BLDY) & 0x1F) != 0) && ((bldcnt & 0x3F) != 0))              \
 
 #define render_layers_color_effect(renderer, layer_condition, alpha_condition, fade_condition, _start, _end) \
 {                                                                             \
@@ -2880,63 +2877,6 @@ static void render_scanline_tile(u16 *scanline, u16 dispcnt)
   render_layers_color_effect(render_layers, layer_count, render_condition_alpha, render_condition_fade, 0, 240);
 }
 
-// Optimized tile renderer that merges static layers
-static void render_scanline_tile_merged(u16 *scanline, u16 dispcnt)
-{
-  u8 current_layer;
-  u32 layer_order_pos;
-  u16 bldcnt = pIO_REG(REG_BLDCNT);
-  render_scanline_layer_functions_tile();
-  
-  // Split rendering: static layers first (cached), then dynamic layers
-  u32 static_rendered = 0;
-  
-  // Step 1: Render static layers to temp buffer (or use cached)
-  static u16 static_composite[240];
-  u32 has_static_layers = 0;
-  
-  for (layer_order_pos = 0; layer_order_pos < layer_count; layer_order_pos++) {
-    current_layer = layer_order[layer_order_pos];
-    if ((current_layer & 0x04) != 0) continue; // Skip OBJ for now
-    
-    if (layer_cache[current_layer & 3].is_static) {
-      if (!has_static_layers) {
-        // First static layer - clear buffer
-        u32 i;
-        for (i = 0; i < 240; i++) {
-          static_composite[i] = palette_ram[0];
-        }
-        has_static_layers = 1;
-      }
-      // Render static layer to composite
-      layer_renderers[current_layer].normal_render_transparent(
-        current_layer, 0, 240, static_composite);
-      static_rendered++;
-    }
-  }
-  
-  // Step 2: Copy static composite to main scanline
-  if (has_static_layers) {
-    u32 i;
-    for (i = 0; i < 240; i++) {
-      scanline[i] = static_composite[i];
-    }
-  }
-  
-  // Step 3: Render dynamic layers on top
-  for (layer_order_pos = 0; layer_order_pos < layer_count; layer_order_pos++) {
-    current_layer = layer_order[layer_order_pos];
-    
-    if ((current_layer & 0x04) != 0) {
-      // Render OBJ layers normally
-      render_layers_color_effect(render_layers, 1, render_condition_alpha, render_condition_fade, 0, 240);
-    } else if (!layer_cache[current_layer & 3].is_static) {
-      // Render dynamic background layer
-      layer_renderers[current_layer].normal_render_transparent(
-        current_layer, 0, 240, scanline);
-    }
-  }
-}
 
 static void render_scanline_bitmap(u16 *scanline, u16 dispcnt)
 {
@@ -3426,38 +3366,7 @@ void update_scanline(void)
       }
       else
       {
-        // Layer merging optimization for Mode 0 with multiple layers
-        if (layer_merge_enabled && video_mode == 0 && layer_count >= 3) {
-          u32 scanline = pIO_REG(REG_VCOUNT);
-          
-          // Check which layers are static every few scanlines
-          if ((scanline & 7) == 0) {  // Check every 8 scanlines
-            u32 i;
-            for (i = 0; i < 4; i++) {
-              check_layer_static(i);
-            }
-          }
-          
-          // Count static vs dynamic layers
-          u32 static_layers = 0, dynamic_layers = 0;
-          u32 i;
-          for (i = 0; i < layer_count && i < 4; i++) {
-            if (layer_cache[layer_order[i] & 3].is_static) {
-              static_layers++;
-            } else {
-              dynamic_layers++;
-            }
-          }
-          
-          // If we have 2+ static layers, use merged rendering
-          if (static_layers >= 2) {
-            render_scanline_tile_merged(screen_offset, dispcnt);
-          } else {
-            render_scanline_tile(screen_offset, dispcnt);
-          }
-        } else {
-          render_scanline_tile(screen_offset, dispcnt);
-        }
+        render_scanline_tile(screen_offset, dispcnt);
       }
     }
     else
@@ -3473,22 +3382,64 @@ void update_scanline(void)
     }
   }
 
-  // Apply color correction if enabled (optimized with lookup tables)
-  if (option_color_correction == 1) // GPSP mode - fast LUT lookup
+  // Apply color correction + brightness. Three paths, fastest to slowest:
+  //
+  // 1. Identity  — all sliders neutral, no color correction: just OR the alpha bit.
+  //    Uses u32 pairs to process 2 pixels per store (120 iterations instead of 240).
+  //
+  // 2. Separable — brightness/contrast/colortemp only (no saturation, no color correction,
+  //    no RGB boost): per-channel 32-byte LUTs (96 bytes total) that fit in a few cache
+  //    lines and stay hot across all 160 scanlines.
+  //
+  // 3. Full LUT  — saturation or color correction active: 64 KB combined_lut with
+  //    software prefetch to overlap cache-miss latency, processed as u32 pairs.
   {
-    for (u32 x = 0; x < 240; x++)
+    u32 *row32 = (u32 *)screen_offset;
+
+    if (lut_is_identity)
     {
-      screen_offset[x] = gpsp_color_lut[screen_offset[x] & 0x7FFF];
+      // Opt 1: u32 pairs — OR alpha into 2 pixels per iteration
+      for (u32 x = 0; x < 120; x++)
+        row32[x] |= 0x80008000u;
+    }
+    else if (lut_is_separable)
+    {
+      // Opt 2: cache-hot per-channel LUTs, u32 pairs
+      for (u32 x = 0; x < 120; x++)
+      {
+        u32 pair = row32[x];
+        u32 lo   = pair        & 0x7FFF;
+        u32 hi   = (pair >> 16) & 0x7FFF;
+        u32 o_lo = ((u32)chan_lut_r[(lo >> 10) & 0x1F] << 10)
+                 | ((u32)chan_lut_g[(lo >>  5) & 0x1F] <<  5)
+                 |  (u32)chan_lut_b[ lo        & 0x1F]
+                 | 0x8000u;
+        u32 o_hi = ((u32)chan_lut_r[(hi >> 10) & 0x1F] << 10)
+                 | ((u32)chan_lut_g[(hi >>  5) & 0x1F] <<  5)
+                 |  (u32)chan_lut_b[ hi        & 0x1F]
+                 | 0x8000u;
+        row32[x] = o_lo | (o_hi << 16);
+      }
+    }
+    else if (combined_lut)
+    {
+      // Opt 3: full 64 KB LUT — u32 pairs + prefetch to hide cache-miss latency.
+      // Prefetch LUT entries for a pair 4 positions ahead while processing current pair.
+      for (u32 x = 0; x < 120; x++)
+      {
+        if (x + 4 < 120)
+        {
+          u32 ahead = row32[x + 4];
+          __builtin_prefetch(&combined_lut[ ahead        & 0x7FFF], 0, 0);
+          __builtin_prefetch(&combined_lut[(ahead >> 16) & 0x7FFF], 0, 0);
+        }
+        u32 pair = row32[x];
+        u32 lo   = pair        & 0x7FFF;
+        u32 hi   = (pair >> 16) & 0x7FFF;
+        row32[x] = (u32)combined_lut[lo] | ((u32)combined_lut[hi] << 16);
+      }
     }
   }
-  else if (option_color_correction == 2) // Retro mode - fast LUT lookup
-  {
-    for (u32 x = 0; x < 240; x++)
-    {
-      screen_offset[x] = retro_color_lut[screen_offset[x] & 0x7FFF];
-    }
-  }
-  // option_color_correction == 0 means Off - no processing
 
   affine_reference_x[0] += *((s16 *)io_registers + REG_BG2PB);
   affine_reference_y[0] += *((s16 *)io_registers + REG_BG2PD);
@@ -3502,68 +3453,275 @@ void init_color_correction_luts(void)
   if (color_luts_initialized)
     return;
     
-  // Allocate lookup tables dynamically to save static memory
-  if (!gpsp_color_lut) {
-    gpsp_color_lut = (u16*)safe_malloc(32768 * sizeof(u16));
-  }
-  if (!retro_color_lut) {
-    retro_color_lut = (u16*)safe_malloc(32768 * sizeof(u16));
-  }
+  if (!gpsp_color_lut)   gpsp_color_lut   = (u16*)safe_malloc(32768 * sizeof(u16));
+  if (!retro_color_lut)  retro_color_lut  = (u16*)safe_malloc(32768 * sizeof(u16));
+  if (!agb101_color_lut) agb101_color_lut = (u16*)safe_malloc(32768 * sizeof(u16));
+  if (!lcd_dim_lut)      lcd_dim_lut      = (u16*)safe_malloc(32768 * sizeof(u16));
+  if (!combined_lut)     combined_lut     = (u16*)safe_malloc(32768 * sizeof(u16));
     
-  printf("Initializing color correction lookup tables...\n");
-  
-  // Build GPSP color correction LUT
+  // --- GPSP color correction ---
   for (int rgb555 = 0; rgb555 < 32768; rgb555++)
   {
-    // Extract RGB555 components
     u32 r = (rgb555 >> 10) & 0x1F;
-    u32 g = (rgb555 >> 5) & 0x1F;
-    u32 b = rgb555 & 0x1F;
+    u32 g = (rgb555 >> 5)  & 0x1F;
+    u32 b =  rgb555        & 0x1F;
     
-    // Convert to 0-255 range for calculations (same as original)
     u32 r8 = (r << 3) | (r >> 2);
     u32 g8 = (g << 3) | (g >> 2);
     u32 b8 = (b << 3) | (b >> 2);
     
-    // Apply GPSP color mixing (same math as original)
     u32 r_new = (205 * r8 + 61 * g8) >> 8;
     u32 g_new = (32 * r8 + 170 * g8 + 54 * b8) >> 8;
     u32 b_new = (50 * r8 + 19 * g8 + 186 * b8) >> 8;
     
-    // Clamp to 255
     r_new = (r_new > 255) ? 255 : r_new;
     g_new = (g_new > 255) ? 255 : g_new;
     b_new = (b_new > 255) ? 255 : b_new;
     
-    // Convert back to 5-bit and store
-    r = r_new >> 3;
-    g = g_new >> 3;
-    b = b_new >> 3;
-    
-    gpsp_color_lut[rgb555] = (r << 10) | (g << 5) | b | 0x8000;
+    gpsp_color_lut[rgb555] = ((r_new >> 3) << 10) | ((g_new >> 3) << 5) | (b_new >> 3) | 0x8000;
   }
   
-  // Build Retro color correction LUT
+  // --- Retro correction (original unlit GBA feel) ---
   for (int rgb555 = 0; rgb555 < 32768; rgb555++)
   {
     u16 r = (rgb555 >> 10) & 0x1F;
-    u16 g = (rgb555 >> 5) & 0x1F;
-    u16 b = rgb555 & 0x1F;
+    u16 g = (rgb555 >> 5)  & 0x1F;
+    u16 b =  rgb555        & 0x1F;
     
-    // Apply retro correction (same as original)
     r = (r * 22) >> 5;
     g = (g * 24) >> 5;
     b = (b * 20) >> 5;
     
-    // Add characteristic GBA greenish tint
     if (g < 28) g += 2;
     if (r < 29) r += 1;
     
     retro_color_lut[rgb555] = (r << 10) | (g << 5) | b | 0x8000;
   }
-  
+
+  // --- AGS-101 (GBA SP backlit screen — vivid, slightly cooler) ---
+  for (int rgb555 = 0; rgb555 < 32768; rgb555++)
+  {
+    u32 r = (rgb555 >> 10) & 0x1F;
+    u32 g = (rgb555 >> 5)  & 0x1F;
+    u32 b =  rgb555        & 0x1F;
+
+    u32 r8 = (r << 3) | (r >> 2);
+    u32 g8 = (g << 3) | (g >> 2);
+    u32 b8 = (b << 3) | (b >> 2);
+
+    // Empirical matrix based on AGS-101 screen measurements
+    u32 r_n = (r8 * 240 + g8 * 16) >> 8;
+    u32 g_n = (g8 * 220 + b8 * 36) >> 8;
+    u32 b_n = (b8 * 230 + r8 * 26) >> 8;
+
+    r_n = (r_n > 255) ? 255 : r_n;
+    g_n = (g_n > 255) ? 255 : g_n;
+    b_n = (b_n > 255) ? 255 : b_n;
+
+    agb101_color_lut[rgb555] = ((r_n >> 3) << 10) | ((g_n >> 3) << 5) | (b_n >> 3) | 0x8000;
+  }
+
+  // --- LCD dim (original GBA without backlight — dark, greenish, low contrast) ---
+  for (int rgb555 = 0; rgb555 < 32768; rgb555++)
+  {
+    u32 r = (rgb555 >> 10) & 0x1F;
+    u32 g = (rgb555 >> 5)  & 0x1F;
+    u32 b =  rgb555        & 0x1F;
+
+    r = (r * 18) >> 5;   // ~56% brightness
+    g = (g * 20) >> 5;   // ~62% brightness, greener
+    b = (b * 14) >> 5;   // ~44% brightness, less blue
+
+    if (g < 30) g = (g * 34) >> 5;  // Characteristic greenish tint
+
+    r = (r > 31) ? 31 : r;
+    g = (g > 31) ? 31 : g;
+    b = (b > 31) ? 31 : b;
+
+    lcd_dim_lut[rgb555] = (r << 10) | (g << 5) | b | 0x8000;
+  }
+
   color_luts_initialized = 1;
-  printf("Color correction LUTs initialized (128KB)\n");
+
+  // Build initial combined LUT (color off + default brightness)
+  rebuild_combined_lut();
+}
+
+// Rebuild the combined color+brightness+contrast+saturation+colortemp LUT.
+// Call whenever any visual option changes. Single pass per scanline.
+void rebuild_combined_lut(void)
+{
+  if (!combined_lut)
+    combined_lut = (u16*)safe_malloc(32768 * sizeof(u16));
+
+  // Select source color correction LUT (NULL = identity)
+  u16 *src = NULL;
+  switch (option_color_correction) {
+    case COLOR_CORRECTION_GPSP:    src = gpsp_color_lut;   break;
+    case COLOR_CORRECTION_RETRO:   src = retro_color_lut;  break;
+    case COLOR_CORRECTION_AGS101:  src = agb101_color_lut; break;
+    case COLOR_CORRECTION_LCD_DIM: src = lcd_dim_lut;      break;
+    default: src = NULL; break;
+  }
+
+  // Pre-compute adjustment factors in 8.8 fixed point
+  // Brightness: 4->256 (neutral), 0->128, 8->384
+  u32 bright_factor = 128 + (option_brightness * 32);
+
+  // Contrast: 4->neutral, 0->flat, 8->high
+  // Applied as: out = (in - 128) * factor + 128
+  // factor: 4->256, 0->128 (soft), 8->384 (punchy)
+  u32 contrast_factor = 128 + (option_contrast * 32);
+
+  // Saturation: 8->neutral, 0->grayscale, 16->vivid
+  // factor 0..256: 0=full grayscale, 256=neutral, 512=double sat
+  u32 sat_factor = option_saturation * 32; // 0->0, 8->256, 16->512
+
+  // Color temperature: 8->neutral, 0->warm (boost R, cut B), 16->cool (cut R, boost B)
+  // Each step = COLORTEMP_STEP units in 8-bit space; max shift ±(8 * COLORTEMP_STEP).
+  s32 temp_r = (s32)(option_colortemp - 8) * (-COLORTEMP_STEP); // warm=+R, cool=-R
+  s32 temp_b = (s32)(option_colortemp - 8) * ( COLORTEMP_STEP); // warm=-B, cool=+B
+
+  u8 all_neutral = (option_brightness == BRIGHTNESS_DEFAULT &&
+                    option_contrast   == CONTRAST_DEFAULT   &&
+                    option_saturation == SATURATION_DEFAULT &&
+                    option_colortemp  == COLORTEMP_DEFAULT  &&
+                    option_color_r    == COLOR_RGB_DEFAULT  &&
+                    option_color_g    == COLOR_RGB_DEFAULT  &&
+                    option_color_b    == COLOR_RGB_DEFAULT);
+
+  // Is the adjustment channel-separable?
+  // True when: no color correction LUT, no saturation mixing, no cross-channel RGB boost.
+  // Brightness, contrast, and colortemp all operate independently per channel.
+  u8 separable = (!src &&
+                  option_saturation == SATURATION_DEFAULT &&
+                  option_color_r    == COLOR_RGB_DEFAULT  &&
+                  option_color_g    == COLOR_RGB_DEFAULT  &&
+                  option_color_b    == COLOR_RGB_DEFAULT);
+
+  // Fast path: no color correction, all sliders neutral → LUT is just (i | 0x8000).
+  // Mark as identity so the per-scanline loop can use a cheaper OR instead of a lookup.
+  lut_is_identity  = (all_neutral && !src);
+  lut_is_separable = (!lut_is_identity && separable);
+
+  // Separable path: build 3×32-byte per-channel LUTs (96 bytes total, cache-hot).
+  // Covers the common "only brightness/contrast/colortemp tweaked" scenario.
+  if (lut_is_separable)
+  {
+    for (int i = 0; i < 32; i++)
+    {
+      // Expand 5-bit channel value to 8-bit
+      s32 val_r = (i * 255) / 31;
+      s32 val_g = val_r;
+      s32 val_b = val_r;
+
+      // Brightness
+      if (option_brightness != BRIGHTNESS_DEFAULT) {
+        val_r = (val_r * (s32)bright_factor) >> 8;
+        val_g = (val_g * (s32)bright_factor) >> 8;
+        val_b = (val_b * (s32)bright_factor) >> 8;
+      }
+
+      // Contrast
+      if (option_contrast != CONTRAST_DEFAULT) {
+        val_r = (((val_r - 128) * (s32)contrast_factor) >> 8) + 128;
+        val_g = (((val_g - 128) * (s32)contrast_factor) >> 8) + 128;
+        val_b = (((val_b - 128) * (s32)contrast_factor) >> 8) + 128;
+      }
+
+      // Color temperature (different per channel)
+      if (option_colortemp != COLORTEMP_DEFAULT) {
+        val_r += temp_r;
+        val_b += temp_b;
+      }
+
+      // Clamp and compress back to 5-bit
+      chan_lut_r[i] = (u8)((val_r < 0 ? 0 : val_r > 255 ? 255 : val_r) >> 3);
+      chan_lut_g[i] = (u8)((val_g < 0 ? 0 : val_g > 255 ? 255 : val_g) >> 3);
+      chan_lut_b[i] = (u8)((val_b < 0 ? 0 : val_b > 255 ? 255 : val_b) >> 3);
+    }
+    return;  // channel LUTs built — combined_lut not needed for this case
+  }
+
+  for (int i = 0; i < 32768; i++)
+  {
+    // Step 1: apply color correction LUT (or identity)
+    u16 c = src ? src[i] : (u16)(i | 0x8000);
+
+    if (all_neutral && !src) {
+      combined_lut[i] = c;
+      continue;
+    }
+
+    // Extract to 0-255 range for math
+    s32 r = (((c >> 10) & 0x1F) * 255) / 31;
+    s32 g = (((c >>  5) & 0x1F) * 255) / 31;
+    s32 b = (( c        & 0x1F) * 255) / 31;
+
+    // Step 2: Brightness
+    if (option_brightness != BRIGHTNESS_DEFAULT) {
+      r = (r * (s32)bright_factor) >> 8;
+      g = (g * (s32)bright_factor) >> 8;
+      b = (b * (s32)bright_factor) >> 8;
+    }
+
+    // Step 3: Contrast — pivot around midpoint 128
+    if (option_contrast != CONTRAST_DEFAULT) {
+      r = (((r - 128) * (s32)contrast_factor) >> 8) + 128;
+      g = (((g - 128) * (s32)contrast_factor) >> 8) + 128;
+      b = (((b - 128) * (s32)contrast_factor) >> 8) + 128;
+    }
+
+    // Step 4: Saturation — blend toward luminance
+    if (option_saturation != SATURATION_DEFAULT) {
+      // Rec.601 luminance weights
+      s32 luma = (r * 77 + g * 150 + b * 29) >> 8;
+      r = luma + (((r - luma) * (s32)sat_factor) >> 8);
+      g = luma + (((g - luma) * (s32)sat_factor) >> 8);
+      b = luma + (((b - luma) * (s32)sat_factor) >> 8);
+    }
+
+    // Step 5: Color temperature
+    if (option_colortemp != COLORTEMP_DEFAULT) {
+      r += temp_r;
+      b += temp_b;
+    }
+
+    // Step 6: Selective color boost (option 0-8, 4=neutral)
+    // Only boosts/cuts pixels where that channel is dominant over the others.
+    // Gray/neutral pixels are unaffected; already-red pixels become more/less vivid.
+    // boost = (option - 4) as signed offset in [0..256] units.
+    // Applied as: excess = channel - avg(other two); out = channel + excess * boost / 256
+    if (option_color_r != COLOR_RGB_DEFAULT) {
+      s32 excess = r - ((g + b) >> 1);
+      if (excess > 0) {
+        s32 boost = (s32)option_color_r - 4; // -4..+4
+        r += (excess * boost * 32) >> 8;     // scale: 32/256 ≈ 12% per step
+      }
+    }
+    if (option_color_g != COLOR_RGB_DEFAULT) {
+      s32 excess = g - ((r + b) >> 1);
+      if (excess > 0) {
+        s32 boost = (s32)option_color_g - 4;
+        g += (excess * boost * 32) >> 8;
+      }
+    }
+    if (option_color_b != COLOR_RGB_DEFAULT) {
+      s32 excess = b - ((r + g) >> 1);
+      if (excess > 0) {
+        s32 boost = (s32)option_color_b - 4;
+        b += (excess * boost * 32) >> 8;
+      }
+    }
+
+    // Clamp to 0-255
+    r = r < 0 ? 0 : r > 255 ? 255 : r;
+    g = g < 0 ? 0 : g > 255 ? 255 : g;
+    b = b < 0 ? 0 : b > 255 ? 255 : b;
+
+    // Pack back to RGB555
+    combined_lut[i] = (u16)(((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3) | 0x8000);
+  }
 }
 
 void init_video(int devkit_version)
@@ -3608,8 +3766,6 @@ void init_video(int devkit_version)
   // Initialize color correction lookup tables for performance
   init_color_correction_luts();
   
-  // Initialize layer merging cache
-  init_layer_cache();
 }
 
 void video_term(void)
@@ -3641,11 +3797,8 @@ static void generate_display_list(float mag)
   dh = GBA_SCREEN_HEIGHT * mag;
 
   // Apply user-specified X/Y offset for overlay positioning
-  extern u32 option_overlay_offset_x;
-  extern u32 option_overlay_offset_y;
-  
   /*
-  FILE *debug_log = fopen("froggba_debug.log", "a");
+  FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "generate_display_list: READING offset vars: option_overlay_offset_x=%d, option_overlay_offset_y=%d\n", 
             option_overlay_offset_x, option_overlay_offset_y);
@@ -3670,7 +3823,7 @@ static void generate_display_list(float mag)
   dy = (new_dy < 0) ? 0 : (new_dy > PSP_SCREEN_HEIGHT - dh) ? PSP_SCREEN_HEIGHT - dh : new_dy;
   
   /*
-  debug_log = fopen("froggba_debug.log", "a");
+  debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "generate_display_list: mag=%.2f, dw=%d, dh=%d, default_dx=%d, default_dy=%d, offset_x=%d, offset_y=%d, final_dx=%d, final_dy=%d\n", 
             mag, dw, dh, default_dx, default_dy, option_overlay_offset_x, option_overlay_offset_y, dx, dy);
@@ -3679,7 +3832,7 @@ static void generate_display_list(float mag)
   */
 
   sceGuStart(GU_CALL, display_list_0);
-
+  sceGuClearColor(0);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
   vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
@@ -3722,21 +3875,335 @@ static void generate_display_list(float mag)
   }
 
   sceGuFinish();
+
+  // Also build Scale2x companion list for this same rect (UV doubled, same XY)
+  generate_display_list_2x_for_rect(dx, dy, dw, dh);
+}
+
+// Sharp Bilinear: simple 2× pixel doubling 240×160 → 480×320 into scale2x_buffer.
+// Each GBA pixel becomes an exact 2×2 block — no smoothing, no rounding.
+// GPU then applies bilinear only for the sub-integer vertical step (320→272),
+// which is a much smaller interpolation than going directly from 160→272.
+// Sharp Bilinear pixel doubler: 240×160 → 480×320.
+// Grid filter is integrated here so the scale2x_buffer is only traversed once.
+//
+// Grid pixel layout in the 2×2 output block for each source pixel p:
+//   dst_t[sx*2]   dst_t[sx*2+1]     (even dst row = sy*2)
+//   dst_b[sx*2]   dst_b[sx*2+1]     (odd  dst row = sy*2+1)
+//
+//   grid=0:  p      p       p      p
+//   grid=1:  p      p       p30    p30   (subtle: odd row darkened)
+//   grid=2:  p      p28     p28    p24   (full:   odd col + odd row borders)
+//
+// Sharp Bilinear companion display list: same screen rect as the current display mode,
+// but UV coordinates are doubled (u=0..480, v=0..320) to map scale2x_buffer correctly.
+//
+// Key insight for zoom/2× mode: dh=320 > PSP height 272, so GU clips the bottom
+// naturally → every visible screen row maps 1:1 to exactly one texture row,
+// eliminating the vertical compression that caused rounded/blurred letters.
+//
+// For other modes (4:3, stretch, 1.5×) where dh ≤ 272, GU compresses 320→dh rows;
+// some minor interpolation occurs but aspect ratio and magnification are respected.
+static void generate_display_list_2x_for_rect(u32 dx, u32 dy, u32 dw, u32 dh)
+{
+  u32 i;
+  Vertex *vertices, *vertices_tmp;
+
+  // Save display rect so apply_grid_overlay_gu() can draw screen-space grid lines.
+  cur_disp_dx = dx;  cur_disp_dy = dy;
+  cur_disp_dw = dw;  cur_disp_dh = dh;
+
+  sceGuStart(GU_CALL, display_list_s2x);
+  sceGuClearColor(0);
+  sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
+
+  vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
+
+  if (vertices != NULL)
+  {
+    memset(vertices, 0, VERTEX_COUNT * sizeof(Vertex));
+    vertices_tmp = vertices;
+
+    for (i = 0; (i + SLICE) < GBA_SCREEN_WIDTH; i += SLICE)
+    {
+      // UV: doubled x (0..480), full y (0..320)
+      // XY: same proportional slice of the destination rect as the normal display list
+      vertices_tmp[0].u = (u16)(i * 2);
+      vertices_tmp[0].v = 0;
+      vertices_tmp[0].x = (u16)(dx + (i * dw) / GBA_SCREEN_WIDTH);
+      vertices_tmp[0].y = (u16)dy;
+
+      vertices_tmp[1].u = (u16)((i + SLICE) * 2);
+      vertices_tmp[1].v = (u16)SCALE2X_H;
+      vertices_tmp[1].x = (u16)(dx + ((i + SLICE) * dw) / GBA_SCREEN_WIDTH);
+      vertices_tmp[1].y = (u16)(dy + dh);
+
+      vertices_tmp += 2;
+    }
+
+    // Final (remainder) slice
+    vertices_tmp[0].u = (u16)(i * 2);
+    vertices_tmp[0].v = 0;
+    vertices_tmp[0].x = (u16)(dx + (i * dw) / GBA_SCREEN_WIDTH);
+    vertices_tmp[0].y = (u16)dy;
+
+    vertices_tmp[1].u = (u16)SCALE2X_W;
+    vertices_tmp[1].v = (u16)SCALE2X_H;
+    vertices_tmp[1].x = (u16)(dx + dw);
+    vertices_tmp[1].y = (u16)(dy + dh);
+
+    sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D,
+                   VERTEX_COUNT, 0, vertices);
+  }
+
+  sceGuFinish();
+}
+
+// Grid overlay — draws horizontal (and optional vertical) darkening strips over the
+// PSP framebuffer using GPU multiply blend. Runs after the main screen render so it
+// operates at native PSP resolution: no bilinear blurring, no CPU VRAM reads.
+//
+// Blend equation: result = 0×drawn_color + darken_factor×existing_framebuffer
+//   → each covered pixel is multiplied by darken_factor, leaving uncovered pixels intact.
+//
+// Subtle (grid=1): 159 horizontal strips, factor ≈ 30/32 = 93.75%.
+// Full   (grid=2): same horizontal strips + 239 vertical strips, each at 87.5%.
+//   Intersections receive 87.5%×87.5% ≈ 76.6%, matching the lut24 (75%) corner target.
+//
+// Vertex cache: the line positions depend only on the display rect (dx/dy/dw/dh) and
+// option_grid. The rect changes at most once per session (when the user picks a display
+// mode), so we store the last-built parameters and skip the rebuild + D-cache flush on
+// every subsequent frame. Once flushed to main RAM, the GPU DMA can reuse the buffer
+// indefinitely without further CPU involvement.
+static u32 gvtx_nh = 0, gvtx_nv = 0;             // cached vertex counts
+static u32 gvtx_last_dx = ~0u, gvtx_last_dy = ~0u;
+static u32 gvtx_last_dw = ~0u, gvtx_last_dh = ~0u;
+static u32 gvtx_last_grid = ~0u;
+
+static void apply_grid_overlay_gu(void)
+{
+  if (option_grid == 0) return;
+
+  const u32 dx = cur_disp_dx, dy = cur_disp_dy;
+  const u32 dw = cur_disp_dw, dh = cur_disp_dh;
+
+  // Rebuild vertex arrays only when the display rect or grid mode has changed.
+  if (dx != gvtx_last_dx || dy != gvtx_last_dy ||
+      dw != gvtx_last_dw || dh != gvtx_last_dh ||
+      option_grid != gvtx_last_grid)
+  {
+    gvtx_nh = 0;
+    for (u32 k = 1; k < GBA_SCREEN_HEIGHT; k++)
+    {
+      const float y = (float)(dy + (k * dh) / GBA_SCREEN_HEIGHT);
+      grid_vtx_h[gvtx_nh].x = (float)dx;        grid_vtx_h[gvtx_nh].y = y;        grid_vtx_h[gvtx_nh].z = 0.0f; gvtx_nh++;
+      grid_vtx_h[gvtx_nh].x = (float)(dx + dw); grid_vtx_h[gvtx_nh].y = y + 1.0f; grid_vtx_h[gvtx_nh].z = 0.0f; gvtx_nh++;
+    }
+    sceKernelDcacheWritebackRange(grid_vtx_h, gvtx_nh * sizeof(GridVtxF));
+
+    gvtx_nv = 0;
+    if (option_grid == 2)
+    {
+      for (u32 k = 1; k < GBA_SCREEN_WIDTH; k++)
+      {
+        const float x = (float)(dx + (k * dw) / GBA_SCREEN_WIDTH);
+        grid_vtx_v[gvtx_nv].x = x;        grid_vtx_v[gvtx_nv].y = (float)dy;        grid_vtx_v[gvtx_nv].z = 0.0f; gvtx_nv++;
+        grid_vtx_v[gvtx_nv].x = x + 1.0f; grid_vtx_v[gvtx_nv].y = (float)(dy + dh); grid_vtx_v[gvtx_nv].z = 0.0f; gvtx_nv++;
+      }
+      sceKernelDcacheWritebackRange(grid_vtx_v, gvtx_nv * sizeof(GridVtxF));
+    }
+
+    gvtx_last_dx = dx; gvtx_last_dy = dy;
+    gvtx_last_dw = dw; gvtx_last_dh = dh;
+    gvtx_last_grid = option_grid;
+  }
+
+  // Use cached counts from here on (valid whether we just rebuilt or reused).
+  const u32 nh = gvtx_nh;
+  const u32 nv = gvtx_nv;
+
+  // GU FIX blend color: 8-bit per channel, uniform R=G=B so endianness doesn't matter.
+  // subtle: 0xEF/0xFF ≈ 93.75% (matches grid_lut30 factor 30/32)
+  // full  : 0xDF/0xFF ≈ 87.45% (matches grid_lut28 factor 28/32)
+  const u32 darken = (option_grid == 1) ? 0x00EFEFEFu : 0x00DFDFDFu;
+
+  // GPU pass: multiply-blend lines over the current framebuffer.
+  // display_list is safe to reuse here — we've already sceGuSync'd the main render.
+  sceGuStart(GU_DIRECT, display_list);
+  sceGuDisable(GU_TEXTURE_2D);
+  sceGuEnable(GU_BLEND);
+  // result = 0×src + darken×dst  →  darken the framebuffer under each strip
+  sceGuBlendFunc(GU_ADD, GU_FIX, GU_FIX, 0x00000000u, darken);
+
+  sceGuDrawArray(GU_SPRITES,
+                 GU_VERTEX_32BITF | GU_TRANSFORM_2D,
+                 (s32)nh, NULL, grid_vtx_h);
+
+  if (option_grid == 2)
+  {
+    // Vertical pass: intersections are re-darkened by the same factor, giving
+    // 87.5% × 87.5% ≈ 76.6% at corners (close to lut24's 75% target).
+    sceGuDrawArray(GU_SPRITES,
+                   GU_VERTEX_32BITF | GU_TRANSFORM_2D,
+                   (s32)nv, NULL, grid_vtx_v);
+  }
+
+  sceGuDisable(GU_BLEND);
+  sceGuEnable(GU_TEXTURE_2D);
+  sceGuFinish();
+  sceGuSync(0, GU_SYNC_FINISH);
 }
 
 static void bitbilt_gu(void)
 {
-  sceKernelDcacheWritebackAll();
+  if (option_screen_filter == FILTER_SHARP_BILINEAR)
+  {
+    u32 i;
+    Vertex *v, *vp;
 
-  sceGuStart(GU_DIRECT, display_list);
+    // Two-pass GPU Sharp Bilinear:
+    //   Pass 1: GE nearest-neighbor upscale screen_texture 240×160 → scale2x_buffer 480×320.
+    //   Pass 2 (display_list_s2x): GE bilinear render scale2x_buffer 480×320 → framebuffer.
+    //
+    // Pass 1 is built inline as a GU_DIRECT submission so the draw-buffer change is
+    // handled by the normal GU_DIRECT dispatch path.  Using a pre-built GU_CALL list
+    // for a render-to-texture pass is non-standard on PSP and caused double-image
+    // artifacts; every PSP render-to-texture example uses a dedicated GU_DIRECT submission.
+    sceKernelDcacheWritebackRange(screen_texture,
+      GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
 
-  sceGuCallList(display_list_0);
+    // Pass 1: GE nearest-neighbor upscale screen_texture → scale2x_buffer.
+    sceGuStart(GU_DIRECT, display_list);
+    sceGuDrawBuffer(GU_PSM_5551, (void *)SCALE2X_VRAM_OFFSET, SCALE2X_LINE_SIZE);
+    sceGuScissor(0, 0, SCALE2X_W, SCALE2X_H);
+    sceGuTexMode(GU_PSM_5551, 0, 0, GU_FALSE);
+    sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
+    sceGuTexFilter(GU_NEAREST, GU_NEAREST);
+    sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
+    sceGuDisable(GU_BLEND);
+    sceGuEnable(GU_TEXTURE_2D);
+
+    v = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
+    if (v != NULL)
+    {
+      memset(v, 0, VERTEX_COUNT * sizeof(Vertex));
+      vp = v;
+      for (i = 0; (i + SLICE) < GBA_SCREEN_WIDTH; i += SLICE)
+      {
+        vp[0].u = (u16)i;                  vp[0].v = 0;
+        vp[0].x = (u16)(i * 2);            vp[0].y = 0;
+        vp[1].u = (u16)(i + SLICE);        vp[1].v = (u16)GBA_SCREEN_HEIGHT;
+        vp[1].x = (u16)((i + SLICE) * 2);  vp[1].y = (u16)SCALE2X_H;
+        vp += 2;
+      }
+      vp[0].u = (u16)i;                    vp[0].v = 0;
+      vp[0].x = (u16)(i * 2);              vp[0].y = 0;
+      vp[1].u = (u16)GBA_SCREEN_WIDTH;     vp[1].v = (u16)GBA_SCREEN_HEIGHT;
+      vp[1].x = (u16)SCALE2X_W;            vp[1].y = (u16)SCALE2X_H;
+
+      sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D,
+                     VERTEX_COUNT, 0, v);
+    }
+    sceGuFinish();
+    sceGuSync(0, GU_SYNC_FINISH);
+
+    // Pass 2: bilinear render scale2x_buffer → framebuffer.
+    sceGuStart(GU_DIRECT, display_list);
+    sceGuDrawBuffer(GU_PSM_5551, draw_frame, PSP_LINE_SIZE);
+    sceGuScissor(0, 0, PSP_SCREEN_WIDTH, PSP_SCREEN_HEIGHT);
+    sceGuTexImage(0, 512, 512, SCALE2X_LINE_SIZE, scale2x_buffer);
+    gpu_tex_is_2x = 1;
+    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    sceGuTexFlush();
+    sceGuCallList(display_list_s2x);
+    sceGuFinish();
+    sceGuSync(0, GU_SYNC_FINISH);
+  }
+  else
+  {
+    // Native path: GPU scales 240×160 screen_texture directly to display.
+    // Same write-buffer drain as above: the SYNC inside this call ensures
+    // the GBA renderer's last scanline writes are visible to the GE.
+    sceKernelDcacheWritebackRange(screen_texture,
+      GBA_SCREEN_HEIGHT * GBA_LINE_SIZE * sizeof(u16));
+
+    sceGuStart(GU_DIRECT, display_list);
+    if (gpu_tex_is_2x) {
+      sceGuTexImage(0, 256, 256, GBA_LINE_SIZE, screen_texture);
+      gpu_tex_is_2x = 0;
+    }
+    sceGuTexFlush();
+    sceGuCallList(display_list_0);
+    sceGuFinish();
+    sceGuSync(0, GU_SYNC_FINISH);
+  }
+
+  // Grid overlay: draw darkened strips in PSP screen space via GPU multiply blend.
+  // Must run after sceGuSync so the framebuffer has the full game image.
+  apply_grid_overlay_gu();
+
+  // Overlay borders (PNG overlay) — drawn last so they cover the grid at the edges.
+  render_overlay();
+}
+
+// 4:3 display list - fits GBA image into PSP screen with correct 4:3 proportions
+// No cropping, no distortion — pillarboxed with black bars on left/right
+static void generate_display_list_4x3(void)
+{
+  u32 i;
+  Vertex *vertices, *vertices_tmp;
+
+  // At PSP height 272, a 4:3 width = 272 * 4/3 = ~362px
+  // Centre horizontally with ~59px margins each side
+  u32 dh = PSP_SCREEN_HEIGHT;             // 272
+  u32 dw = (dh * 4) / 3;                 // 362
+  u32 dx = (PSP_SCREEN_WIDTH - dw) / 2;  // ~59
+  u32 dy = 0;
+
+  sceGuStart(GU_CALL, display_list_0);
+  sceGuClearColor(0);
+  sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
+
+  vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
+
+  if (vertices != NULL)
+  {
+    memset(vertices, 0, VERTEX_COUNT * sizeof(Vertex));
+    vertices_tmp = vertices;
+
+    for (i = 0; (i + SLICE) < GBA_SCREEN_WIDTH; i += SLICE)
+    {
+      vertices_tmp[0].u = i;
+      vertices_tmp[0].v = 0;
+      vertices_tmp[0].x = dx + ((i * dw) / GBA_SCREEN_WIDTH);
+      vertices_tmp[0].y = dy;
+
+      vertices_tmp[1].u = i + SLICE;
+      vertices_tmp[1].v = GBA_SCREEN_HEIGHT;
+      vertices_tmp[1].x = dx + (((i + SLICE) * dw) / GBA_SCREEN_WIDTH);
+      vertices_tmp[1].y = dy + dh;
+
+      vertices_tmp += 2;
+    }
+
+    vertices_tmp[0].u = i;
+    vertices_tmp[0].v = 0;
+    vertices_tmp[0].x = dx + ((i * dw) / GBA_SCREEN_WIDTH);
+    vertices_tmp[0].y = dy;
+
+    vertices_tmp[1].u = GBA_SCREEN_WIDTH;
+    vertices_tmp[1].v = GBA_SCREEN_HEIGHT;
+    vertices_tmp[1].x = dx + dw;
+    vertices_tmp[1].y = dy + dh;
+
+    sceGuDrawArray(GU_SPRITES, GU_TEXTURE_16BIT | GU_VERTEX_16BIT | GU_TRANSFORM_2D,
+                   VERTEX_COUNT, 0, vertices);
+  }
 
   sceGuFinish();
-  sceGuSync(0, GU_SYNC_FINISH);
-  
-  // Apply overlay AFTER GPU finishes to avoid conflicts
-  render_overlay();
+
+  // Scale2x companion list for 4:3 mode
+  generate_display_list_2x_for_rect(dx, dy, dw, dh);
 }
 
 // Stretch display list - stretches GBA screen to fill entire PSP screen (480x272)
@@ -3754,7 +4221,7 @@ static void generate_display_list_stretch(void)
   dy = 0;
   
   /*
-  FILE *debug_log = fopen("froggba_debug.log", "a");
+  FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "generate_display_list_stretch: stretching to full PSP screen dw=%d, dh=%d\n", dw, dh);
     fclose(debug_log);
@@ -3762,7 +4229,7 @@ static void generate_display_list_stretch(void)
   */
 
   sceGuStart(GU_CALL, display_list_0);
-
+  sceGuClearColor(0);
   sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
 
   vertices = (Vertex *)sceGuGetMemory(VERTEX_COUNT * sizeof(Vertex));
@@ -3802,6 +4269,9 @@ static void generate_display_list_stretch(void)
   }
 
   sceGuFinish();
+
+  // Scale2x companion list for stretch mode
+  generate_display_list_2x_for_rect(dx, dy, dw, dh);
 }
 
 
@@ -3812,8 +4282,6 @@ static void bitbilt_sw(void)
   u32 x, y;
   u16 *vptr, *vptr0;
   u16 *d, *d0;
-
-  sceKernelDcacheWritebackAll();
 
   sceGuStart(GU_DIRECT, display_list);
 
@@ -3867,22 +4335,33 @@ void video_resolution_small(void)
 {
   set_gba_resolution();
 
-  sceGuStart(GU_DIRECT, display_list);
+  // Map filter option to GU value (GU_NEAREST=0, GU_LINEAR=1).
+  // Sharp Bilinear: CPU does 2× pixel double; GU applies bilinear for the 320→272 step.
+  // Nearest/Bilinear: pass directly to GU.
+  u32 gu_filter = (option_screen_filter == FILTER_SHARP_BILINEAR) ? GU_LINEAR : option_screen_filter;
 
-  sceGuClearColor(0);
-  sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
-
-  sceGuTexFilter(option_screen_filter, option_screen_filter);
-
-  sceGuFinish();
-  sceGuSync(0, GU_SYNC_FINISH);
+  // Clear BOTH PSP framebuffers before returning to gameplay. Without this,
+  // the framebuffer that was last displaying the game-selection menu retains
+  // its content in the pillarbox area (the ~59 px left/right bars for 4:3 mode).
+  // That stale content flickers through on the first 1-2 game frames because the
+  // display lists' sceGuClear only catches one buffer per frame — most visible
+  // with Sharp Bilinear in 4:3 mode.
+  u32 f;
+  for (f = 0; f < 2; f++)
+  {
+    sceGuStart(GU_DIRECT, display_list);
+    sceGuClearColor(0);
+    sceGuClear(GU_COLOR_BUFFER_BIT | GU_FAST_CLEAR_BIT);
+    sceGuTexFilter(gu_filter, gu_filter);
+    sceGuFinish();
+    sceGuSync(0, GU_SYNC_FINISH);
+    if (f == 0) flip_screen(0);
+  }
 }
 
 void set_gba_resolution(void)
 {
-  extern u32 option_aspect_ratio;
-  
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "set_gba_resolution: option_screen_scale=%d, aspect_ratio=%d\n", 
             option_screen_scale, option_aspect_ratio);
@@ -3900,6 +4379,12 @@ void set_gba_resolution(void)
     // Stretch mode: stretch to fill entire PSP screen without cropping
     // This distorts the aspect ratio but shows all content
     generate_display_list_stretch(); // Custom stretch function
+    update_screen = bitbilt_gu;
+    return;
+  }
+  else if (option_aspect_ratio == 3) {
+    // 4:3 mode: pillarboxed, no cropping, no distortion
+    generate_display_list_4x3();
     update_screen = bitbilt_gu;
     return;
   }
@@ -3940,7 +4425,6 @@ void clear_screen(u32 color)
   // Used by GUI Menus
   
   // When screen is cleared, overlay needs to be re-applied
-  extern int overlay_needs_update;
   overlay_needs_update = 1;
 
   // Hardware Clear - results in a blank screen in PPSSPP emulator
@@ -3953,62 +4437,57 @@ void clear_screen(u32 color)
   //sceGuSync(0, GU_SYNC_FINISH);
 
   // Software Clear - work on PPSSPP and real PSP Hardware
-  
+
   // Convert COLOR32 (8-bit RGB) to COLOR16 (5-bit RGB, 5551 format)
   u32 r8 = (color >>  0) & 0xFF;
   u32 g8 = (color >>  8) & 0xFF;
   u32 b8 = (color >> 16) & 0xFF;
   u16 color16 = ((r8 >> 3) << 0) | ((g8 >> 3) << 5) | ((b8 >> 3) << 10) | 0x8000;
-  
+
   // Use UNCACHED VRAM (0x44000000) to match print_string()
   // Using cached (0x04000000) causes sync issues in PPSSPP and can mean text doesn't appear (same as Hardware Clear)
   u16 *vram_ptr = (u16 *)((u32)draw_frame | 0x44000000);
-  u32 pixels = PSP_LINE_SIZE * PSP_SCREEN_HEIGHT;
-  for (u32 i = 0; i < pixels; i++)
+
+  // Write two pixels per store (u32 pair) to halve the loop iteration count
+  // PSP_LINE_SIZE * PSP_SCREEN_HEIGHT = 512*272 = 139264, always even
+  u32 pair = ((u32)color16 << 16) | color16;
+  u32 *vp32 = (u32 *)vram_ptr;
+  u32 pixel_pairs = (PSP_LINE_SIZE * PSP_SCREEN_HEIGHT) >> 1;
+  for (u32 i = 0; i < pixel_pairs; i++)
   {
-    vram_ptr[i] = color16;
+    vp32[i] = pair;
   }
 }
 
 void clear_texture(u16 color)
 {
   u32 x, y;
-  u16 *p_dest, *p_dest0;
 
-  p_dest0 = screen_texture;
-
+  // Write two pixels per u32 store; GBA_SCREEN_WIDTH=240 is always even
+  u32 pair = ((u32)color << 16) | color;
   for (y = 0; y < GBA_SCREEN_HEIGHT; y++)
   {
-    p_dest = p_dest0;
-
-    for (x = 0; x < GBA_SCREEN_WIDTH; x++, p_dest++)
-      *p_dest = color;
-
-    p_dest0 += GBA_LINE_SIZE;
+    u32 *row = (u32 *)(screen_texture + y * GBA_LINE_SIZE);
+    for (x = 0; x < GBA_SCREEN_WIDTH / 2; x++)
+      row[x] = pair;
   }
 }
 
 
 u16 *copy_screen(void)
 {
-  u32 x, y;
+  u32 y;
   u16 *copy;
-  u16 *p_src, *p_src0;
   u16 *p_dest;
 
   copy = (u16 *)safe_malloc(GBA_SCREEN_SIZE);
 
-  p_src0 = screen_texture;
   p_dest = copy;
 
   for (y = 0; y < GBA_SCREEN_HEIGHT; y++)
   {
-    p_src = p_src0;
-
-    for (x = 0; x < GBA_SCREEN_WIDTH; x++, p_src++, p_dest++)
-      *p_dest = *p_src;
-
-    p_src0 += GBA_LINE_SIZE;
+    memcpy(p_dest, screen_texture + y * GBA_LINE_SIZE, GBA_SCREEN_WIDTH * sizeof(u16));
+    p_dest += GBA_SCREEN_WIDTH;
   }
 
   return copy;
@@ -4366,7 +4845,11 @@ static void draw_volume(int volume)
 {
   Vertex *vertices, *vertices_tmp;
 
-  sceKernelDcacheWritebackAll();
+  // Drain CPU write buffer for the 32-row volume icon written to screen_texture.
+  // (VRAM is uncached so D-cache writeback is a no-op, but the SYNC inside
+  //  this call ensures the writes are committed before the GE reads the texture.)
+  sceKernelDcacheWritebackRange(screen_texture + GBA_LINE_SIZE * VOLICON_OFFSET,
+    32 * GBA_LINE_SIZE * sizeof(u16));
 
   sceGuStart(GU_DIRECT, display_list);
 
@@ -4578,11 +5061,6 @@ static int cache_valid = 0;
 // Function declaration
 static void build_overlay_cache(void);
 
-extern u32 option_overlay_enabled;
-extern u32 option_overlay_selected;
-extern char overlay_names[][64];
-extern char dir_overlay[];
-
 // Load overlay from file (simple raw binary format for now)
 void load_overlay(const char *filename) 
 {
@@ -4593,7 +5071,7 @@ void load_overlay(const char *filename)
   // Clear overlay first
   clear_overlay();
   
-  /*debug_log = fopen("froggba_debug.log", "a");
+  /*debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "load_overlay: filename='%s'\n", filename ? filename : "NULL");
     fclose(debug_log);
@@ -4606,7 +5084,7 @@ void load_overlay(const char *filename)
   // Build full path to overlay file
   sprintf(filepath, "%s%s.ovl", dir_overlay, filename);
   
-  /*debug_log = fopen("froggba_debug.log", "a");
+  /*debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "load_overlay: trying path='%s'\n", filepath);
     fclose(debug_log);
@@ -4616,7 +5094,7 @@ void load_overlay(const char *filename)
   if (overlay_buffer == NULL) {
     overlay_buffer = (u16*)safe_malloc(OVERLAY_SIZE * sizeof(u16));
     if (overlay_buffer == NULL) {
-      /*debug_log = fopen("froggba_debug.log", "a");
+      /*debug_log = fopen("toadgba_debug.log", "a");
       if (debug_log) {
         fprintf(debug_log, "load_overlay: Failed to allocate overlay buffer\n");
         fclose(debug_log);
@@ -4638,7 +5116,7 @@ void load_overlay(const char *filename)
     overlay_first_render = 1; // Reset first render flag for new overlay
     overlay_needs_update = 1; // Mark that overlay needs to be rendered
     
-    /*debug_log = fopen("froggba_debug.log", "a");
+    /*debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "load_overlay: Set overlay_loaded=1, overlay_needs_update=1, overlay_first_render=1\n");
       fclose(debug_log);
@@ -4648,7 +5126,7 @@ void load_overlay(const char *filename)
     // Build ultra-fast overlay cache
     build_overlay_cache();
     
-    /*debug_log = fopen("froggba_debug.log", "a");
+    /*debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "load_overlay: SUCCESS! Read %d bytes, overlay_loaded=%d, opaque=%d\n", 
               bytes_read, overlay_loaded, total_opaque_pixels_in_cache);
@@ -4660,7 +5138,7 @@ void load_overlay(const char *filename)
     // For now, PNG loading is not implemented
     overlay_loaded = 0;
     
-    /*debug_log = fopen("froggba_debug.log", "a");
+    /*debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "load_overlay: FAILED to open file\n");
       fclose(debug_log);
@@ -4699,8 +5177,6 @@ void free_overlay_memory(void)
   current_quality = OVERLAY_QUALITY_FULL;
   cache_valid = 0;
   
-  // Force garbage collection to reclaim memory immediately
-  sceKernelDcacheWritebackAll();
 }
 
 // Temporarily free overlay memory for save/load operations
@@ -4709,9 +5185,6 @@ void pause_overlay_for_saveload(void) {
   if (!overlay_loaded) return;
   
   // Remember which overlay was loaded so we can restore it
-  extern char overlay_names[][64];
-  extern u32 option_overlay_selected;
-  
   if (temp_overlay_filename) {
     free(temp_overlay_filename);
     temp_overlay_filename = NULL;
@@ -4748,13 +5221,9 @@ void force_screen_refresh(void)
   u16 *frame1 = (u16 *)psp_vram_addr((void *)PSP_FRAME_SIZE, 0, 0);
   
   for (int y = 0; y < PSP_SCREEN_HEIGHT; y++) {
-    for (int x = 0; x < PSP_SCREEN_WIDTH; x++) {
-      frame0[y * PSP_LINE_SIZE + x] = 0x0000;
-      frame1[y * PSP_LINE_SIZE + x] = 0x0000;
-    }
+    memset(frame0 + y * PSP_LINE_SIZE, 0, PSP_SCREEN_WIDTH * sizeof(u16));
+    memset(frame1 + y * PSP_LINE_SIZE, 0, PSP_SCREEN_WIDTH * sizeof(u16));
   }
-  
-  sceKernelDcacheWritebackAll();
 }
 
 // Build overlay cache with RLE compression and dynamic allocation
@@ -4879,7 +5348,6 @@ void build_overlay_cache(void) {
   
   // Report quality mode if degraded
   if (current_quality != OVERLAY_QUALITY_FULL) {
-    extern void error_msg(const char *text, u8 confirm);
     char msg[80];
     sprintf(msg, "Overlay: %d pixels, using %s quality", 
             total_overlay_pixels,
@@ -4955,12 +5423,6 @@ void apply_overlay_borders(void)
     }
   }
   
-  // Minimal cache flush - every 8 frames to reduce overhead
-  static int flush_counter = 0;
-  if (++flush_counter >= 8) {
-    sceKernelDcacheWritebackAll();
-    flush_counter = 0;
-  }
 }
 
 void render_overlay(void) 

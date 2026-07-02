@@ -1,6 +1,6 @@
-# 🐸 FrogGBA v0.2.4 – Critical Fixes & Game Resume
+# 🐸 ToadGBA v0.2.4 – Critical Fixes & Game Resume
 
-![froggba24](https://github.com/user-attachments/assets/placeholder-image.png)
+![toadgba24](https://github.com/user-attachments/assets/placeholder-image.png)
 
 Critical update fixing major visual rendering issues and introducing convenient game resume functionality. This release prioritizes accuracy and user experience over raw performance.
 
@@ -10,8 +10,8 @@ Critical update fixing major visual rendering issues and introducing convenient 
 
 1. Download + unzip the release.
 2. Copy the **PSP** folder to your Memory Stick root.
-3. Drop `gba_bios.bin` into `PSP/GAME/FrogGBA/`.
-4. Launch FrogGBA from your PSP Games menu (CFW required).
+3. Drop `gba_bios.bin` into `PSP/GAME/ToadGBA/`.
+4. Launch ToadGBA from your PSP Games menu (CFW required).
 
 ---
 
@@ -45,7 +45,7 @@ Critical update fixing major visual rendering issues and introducing convenient 
 * **Recent Games Menu** – Quick access to your last played titles
 * **Lightning-Fast Overlays** – Full-screen borders with zero performance impact
 * **Custom Overlay Support** – Up to 10 designs with pixel-perfect positioning
-* **Online Overlay Generator** – Create your own at [froggba.onrender.com](https://froggba.onrender.com)
+* **Online Overlay Generator** – Create your own at [toadgba.onrender.com](https://toadgba.onrender.com)
 * **Multiple Aspect Ratios** – Choose your preferred display mode
 * **Fast Color Correction** – Hardware-accelerated color processing
 
@@ -79,7 +79,7 @@ Critical update fixing major visual rendering issues and introducing convenient 
 
 ---
 
-**TL;DR:** FrogGBA v0.2.4 fixes critical visual rendering issues that were causing broken transparency and blending effects. Now includes convenient resume-on-boot and auto-save features for the best user experience. Visual accuracy is prioritized over raw performance. 🐸🎯
+**TL;DR:** ToadGBA v0.2.4 fixes critical visual rendering issues that were causing broken transparency and blending effects. Now includes convenient resume-on-boot and auto-save features for the best user experience. Visual accuracy is prioritized over raw performance. 🐸🎯
 
 ---
 
@@ -88,6 +88,6 @@ Critical update fixing major visual rendering issues and introducing convenient 
 * Original gpSP by Exophase
 * gpSP Kai optimizations by takka
 * TempGBA4PSP base
-* FrogGBA improvements by the community
+* ToadGBA improvements by the community
 
 GPL v2+ Licensed

@@ -21,8 +21,8 @@
 #include "common.h"
 #include <pspiofilemgr.h>
 
-#define GPSP_CONFIG_FILENAME  "froggba.cfg"
-#define GPSP_CONFIG_NUM       (26 + 16) // options + game pad config + overlay options + aspect ratio + compatibility mode + button mapping + resume on boot + auto save state
+#define GPSP_CONFIG_FILENAME  "toadgba.cfg"
+#define GPSP_CONFIG_NUM       (34 + 16) // [0..33] options, [34..49] gamepad (moved: was buggy at 25+i overlapping brightness..grid)
 #define GPSP_GAME_CONFIG_NUM  (7 + 16)
 
 #define COLOR_BG            COLOR15( 8, 15, 12)  // Soft mint green background
@@ -261,10 +261,11 @@ char dir_snap[MAX_PATH];
 char dir_cheat[MAX_PATH];//cheat
 char dir_overlay[MAX_PATH];//overlay
 
+static char dir_disp[5][80];
+
 u32 menu_cheat_page = 0;
 
 // Overlay variables
-#define MAX_OVERLAYS 10
 char overlay_names[MAX_OVERLAYS][64] = {
   "None", "None", "None", "None", "None", 
   "None", "None", "None", "None", "None"
@@ -284,6 +285,15 @@ static const char *recent_games_display[MAX_RECENT_GAMES];
 
 // Global yes/no options - needed for overlay menu
 static const char *global_yes_no_options[2];
+
+// Flag set by the language passive_function; consumed inside menu() where
+// local option arrays are in scope so on_language_change() can be called directly.
+static u8 language_change_pending = 0;
+
+void notify_language_change(void)
+{
+  language_change_pending = 1;
+}
 
 // Global menu structures for overlay - must be here to avoid scope issues  
 MenuOptionType overlay_options_global[5] = {
@@ -322,7 +332,7 @@ void init_overlays_at_boot(void)
   SceIoDirent dirent;
   char *ext;
   
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "DEBUG: init_overlays_at_boot() called\n");
     fprintf(debug_log, "DEBUG: dir_overlay = '%s'\n", dir_overlay);
@@ -336,7 +346,7 @@ void init_overlays_at_boot(void)
   // Try to open the overlays directory
   dir = sceIoDopen(dir_overlay);
   
-  /*debug_log = fopen("froggba_debug.log", "a");
+  /*debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "DEBUG: sceIoDopen returned %d\n", dir);
     fflush(debug_log);
@@ -356,7 +366,7 @@ void init_overlays_at_boot(void)
       ext = strrchr(dirent.d_name, '.');
       if (ext && (strcasecmp(ext, ".ovl") == 0 || strcasecmp(ext, ".png") == 0))
       {
-        /*debug_log = fopen("froggba_debug.log", "a");
+        /*debug_log = fopen("toadgba_debug.log", "a");
         if (debug_log) {
           fprintf(debug_log, "DEBUG: Found overlay: %s\n", dirent.d_name);
           fflush(debug_log);
@@ -379,7 +389,7 @@ void init_overlays_at_boot(void)
     sceIoDclose(dir);
   }
   
-  /*debug_log = fopen("froggba_debug.log", "a");
+  /*debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "DEBUG: init_overlays_at_boot complete, found %u overlays\n", num_overlays);
     fflush(debug_log);
@@ -411,9 +421,7 @@ void scan_overlay_files(void)
 // Called when overlay selection changes
 static void overlay_changed(void)
 {
-  extern int overlay_needs_update;
-  
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "overlay_changed: selected=%d, num_overlays=%d, name='%s'\n", 
             option_overlay_selected, num_overlays, 
@@ -422,7 +430,6 @@ static void overlay_changed(void)
   }*/
   
   if (option_overlay_selected < num_overlays) {
-    extern int overlay_needs_update;
     load_overlay(overlay_names[option_overlay_selected]);
     overlay_needs_update = 1;
   }
@@ -431,11 +438,7 @@ static void overlay_changed(void)
 // Called when overlay enabled/disabled changes
 static void overlay_enabled_changed(void)
 {
-  extern int overlay_needs_update;
-  extern void load_overlay(const char *filename);
-  extern char overlay_names[][64];
-  
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "overlay_enabled_changed: enabled=%d, selected=%d\n", 
             option_overlay_enabled, option_overlay_selected);
@@ -447,13 +450,10 @@ static void overlay_enabled_changed(void)
     load_overlay(overlay_names[option_overlay_selected]);
     overlay_needs_update = 1;
     
-    // FORCE TEST: Apply overlay immediately to test if rendering works
-    extern void apply_overlay_borders(void);
+    // Apply overlay immediately
     apply_overlay_borders();
   } else {
     // Clear overlay when disabled and force screen refresh
-    extern void clear_overlay(void);
-    extern void force_screen_refresh(void);
     clear_overlay();
     force_screen_refresh(); // Clear any remaining overlay pixels
   }
@@ -462,10 +462,6 @@ static void overlay_enabled_changed(void)
 // Called when X/Y offset changes - need to reapply overlay and regenerate display list
 static void overlay_offset_changed(void)
 {
-  extern void set_gba_resolution(void);
-  extern void force_screen_refresh(void);
-  extern int overlay_needs_update;
-  
   // Force complete screen refresh
   force_screen_refresh();
   
@@ -476,7 +472,7 @@ static void overlay_offset_changed(void)
   set_gba_resolution();
   
   // DEBUG: Log when offset changes
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     extern u32 option_overlay_offset_x, option_overlay_offset_y;
     fprintf(debug_log, "overlay_offset_changed: new offset X=%d Y=%d, set overlay_needs_update=1, called set_gba_resolution\n", 
@@ -489,7 +485,7 @@ static void overlay_offset_changed(void)
 
 // Initialize overlay menu structure - to be called when we have MSG available
 static void init_overlay_menu_late(void) {
-    /*FILE *debug_log = fopen("froggba_debug.log", "a");
+    /*FILE *debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
         fprintf(debug_log, "init_overlay_menu_late: Setting up overlay menu callbacks\n");
         fclose(debug_log);
@@ -535,7 +531,7 @@ static void init_overlay_menu_late(void) {
 // Recent games tracking functions
 void load_recent_games(void) {
   char recent_games_file[MAX_PATH];
-  sprintf(recent_games_file, "%sfroggba_recent.txt", dir_cfg);
+  sprintf(recent_games_file, "%stoadgba_recent.txt", dir_cfg);
   
   // Initialize display array
   for (int i = 0; i < MAX_RECENT_GAMES; i++) {
@@ -565,7 +561,7 @@ void load_recent_games(void) {
 
 static void save_recent_games(void) {
   char recent_games_file[MAX_PATH];
-  sprintf(recent_games_file, "%sfroggba_recent.txt", dir_cfg);
+  sprintf(recent_games_file, "%stoadgba_recent.txt", dir_cfg);
   
   FILE *file = fopen(recent_games_file, "w");
   if (file) {
@@ -576,7 +572,7 @@ static void save_recent_games(void) {
   }
 }
 
-static void add_recent_game(const char *game_path) {
+void add_recent_game(const char *game_path) {
   if (!game_path || strlen(game_path) == 0) return;
   
   // Check if game already exists in recent list
@@ -623,9 +619,6 @@ static void add_recent_game(const char *game_path) {
   
   save_recent_games();
 }
-
-// Explicit declaration to ensure visibility
-extern u32 option_optimization_level;
 
 const char *optimization_level_options[] =
 {
@@ -798,6 +791,7 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
     // Add recent games to the file list first (with "★ " prefix)
     // Only show recent games when browsing for ROM files (based on file extension)
     int is_rom_browsing = 0;
+    int is_dir_mode = (!wildcards || !wildcards[0]);
     if (wildcards && wildcards[0]) {
       // Check if we're looking for ROM extensions
       for (int w = 0; wildcards[w]; w++) {
@@ -858,6 +852,12 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
 
     scePowerLock(0);
     current_dir = sceIoDopen(current_dir_name);
+
+    if (!FILE_CHECK_VALID(current_dir)) {
+      scePowerUnlock(0);
+      return_value = -1;
+      break;
+    }
 
     while (sceIoDread(current_dir, &current_file) > 0)
     {
@@ -961,10 +961,22 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
  
 	  print_string(batt_str, BATT_STATUS_POS_X, 2, color_batt_life, BG_NO_FILL);
 
-	  print_string(MSG[MSG_BROWSER_HELP], 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+	  // Help text reflects current button mapping
+      {
+        const char *browser_help;
+        if (is_dir_mode)
+          browser_help = (option_button_mapping == 0)
+            ? "O:Enter  X:Confirm Dir  Square:Up"
+            : "X:Enter  O:Confirm Dir  Square:Up";
+        else
+          browser_help = (option_button_mapping == 0)
+            ? "O:Select  X:Menu  Square:Up Dir"
+            : "X:Select  O:Menu  Square:Up Dir";
+        print_string(browser_help, 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+      }
 
-      // Show mod credit instead of ROM Buffer
-      print_string("FrogGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+      // Show mod credit
+      print_string("ToadGBA", 434, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
       // PSP controller - hold
       if (get_pad_input(PSP_CTRL_HOLD) != 0)
@@ -1163,13 +1175,36 @@ s32 load_file(const char **wildcards, char *result, char *default_dir_name)
               
               // Check if it's a recent game (starts with "> ")
               if (strncmp(selected_file, "> ", 2) == 0) {
-                // Get the actual game index (minus the header and star prefix)
-                int recent_index = selection[FILE_LIST] - 1; // Subtract the "Recent Games" header
+                // Find the "--- Recent Games ---" separator scanning backwards
+                // to get correct index regardless of how many dirs are listed above
+                int sep_index = selection[FILE_LIST] - 1;
+                while (sep_index >= 0 &&
+                       strncmp(file_list[sep_index], "---", 3) != 0)
+                  sep_index--;
+                int recent_index = selection[FILE_LIST] - sep_index - 1;
                 if (recent_index >= 0 && recent_index < num_recent_games) {
-                  // Use the full path from recent_games array
-                  strcpy(result, recent_games[recent_index]);
-                  repeat = 0;
-                  return_value = 0;
+                  char *path = recent_games[recent_index];
+                  // Strip trailing \r or \n from Windows-formatted files
+                  int plen = strlen(path);
+                  while (plen > 0 && (path[plen-1] == '\r' || path[plen-1] == '\n'))
+                    path[--plen] = '\0';
+                  // Verify file exists before loading
+                  SceUID test = sceIoOpen(path, PSP_O_RDONLY, 0777);
+                  if (test >= 0) {
+                    sceIoClose(test);
+                    strcpy(result, path);
+                    repeat = 0;
+                    return_value = 0;
+                  } else {
+                    // File not found — silently remove from recent list
+                    int j;
+                    for (j = recent_index; j < num_recent_games - 1; j++)
+                      strcpy(recent_games[j], recent_games[j+1]);
+                    recent_games[--num_recent_games][0] = '\0';
+                    save_recent_games();
+                    repeat = 1;
+                    break;
+                  }
                 }
               } else {
                 // Normal file selection
@@ -1272,6 +1307,9 @@ void action_loadstate(void)
 {
   char savestate_filename[MAX_FILE];
 
+  // No game loaded — nothing to load into
+  if (gamepak_filename[0] == '\0') return;
+
   // Free overlay memory to ensure enough RAM for load operation
   pause_overlay_for_saveload();
   
@@ -1287,7 +1325,25 @@ void action_savestate(void)
   char savestate_filename[MAX_FILE];
   u16 *current_screen;
 
+  // No game loaded — nothing to save
+  if (gamepak_filename[0] == '\0') return;
+
+  // Guard: ensure save directory is accessible before attempting save
+  // A missing or unwritable dir_state is a common cause of blue screen crashes
+  if (dir_state[0] != '\0') {
+    SceUID test_dir = sceIoDopen(dir_state);
+    if (test_dir < 0) {
+      // Try to create it; if that also fails, bail out gracefully
+      if (sceIoMkdir(dir_state, 0777) < 0) {
+        return;  // Can't save — silent fail is better than a crash
+      }
+    } else {
+      sceIoDclose(test_dir);
+    }
+  }
+
   current_screen = copy_screen();
+  if (!current_screen) return;  // Allocation failure — avoid NULL dereference crash
 
   // Free overlay memory to ensure enough RAM for save operation
   pause_overlay_for_saveload();
@@ -1302,6 +1358,65 @@ void action_savestate(void)
 }
 
 
+// Save a single key=value line to dir.ini, updating if already present.
+// Non-nested static function — safe to call from nested functions on PSP/MIPS.
+static void save_dir_ini_entry(const char *ini_key, const char *new_dir)
+{
+  char ini_path[MAX_PATH];
+  sprintf(ini_path, "%sdir.ini", main_path);
+
+  // Read existing lines (max 16)
+  char lines[16][256];
+  int nlines = 0;
+  FILE *f = fopen(ini_path, "r");
+  if (f) {
+    while (nlines < 15 && fgets(lines[nlines], 256, f))
+      nlines++;
+    fclose(f);
+  }
+
+  // Update matching key or append
+  u8 found = 0;
+  char var[128], val[128];
+  for (int k = 0; k < nlines; k++) {
+    if (parse_config_line(lines[k], var, val) != -1 &&
+        strcasecmp(var, ini_key) == 0) {
+      snprintf(lines[k], 256, "%s = %s\n", ini_key, new_dir);
+      found = 1;
+      break;
+    }
+  }
+  if (!found && nlines < 15)
+    snprintf(lines[nlines++], 256, "%s = %s\n", ini_key, new_dir);
+
+  f = fopen(ini_path, "w");
+  if (f) {
+    for (int k = 0; k < nlines; k++)
+      fputs(lines[k], f);
+    fclose(f);
+  }
+}
+
+// Refresh the Directories submenu display strings to show label + current path.
+// Static (non-nested) so it is safe to call from nested functions on PSP/MIPS.
+static void update_dir_displays(MenuOptionType *opts)
+{
+  static const u32 dir_msgs[5] = {
+    MSG_DIR_ROMS, MSG_DIR_SAVE, MSG_DIR_STATE, MSG_DIR_CHEAT, MSG_DIR_SNAP
+  };
+  char *dir_ptrs[5] = { dir_roms, dir_save, dir_state, dir_cheat, dir_snap };
+  u32 k;
+  for (k = 0; k < 5; k++) {
+    const char *label = MSG[dir_msgs[k]];
+    const char *path  = dir_ptrs[k];
+    u32 plen = (u32)strlen(path);
+    const char *short_path = (plen > 13) ? path + plen - 13 : path;
+    const char *dots       = (plen > 13) ? "..." : "";
+    snprintf(dir_disp[k], 80, "%s %s%s", label, dots, short_path);
+    opts[k].display_string = dir_disp[k];
+  }
+}
+
 u32 menu(void)
 {
   // Auto-save state before entering menu (only if auto save/load is enabled)
@@ -1310,7 +1425,7 @@ u32 menu(void)
   }
   
   // Use the same debug log as HOME button
-  /*FILE *debug_log = fopen("froggba_debug.log", "a");
+  /*FILE *debug_log = fopen("toadgba_debug.log", "a");
   if (debug_log) {
     fprintf(debug_log, "DEBUG: menu() function entry point\n");
     fprintf(debug_log, "DEBUG: overlay_menu_global address: %p\n", &overlay_menu_global);
@@ -1323,41 +1438,41 @@ u32 menu(void)
 	int id_language;
   u32 i;
 
-  u32 repeat = 1;
-  u32 return_value = 0;
+  static u32 repeat;      repeat = 1;
+  static u32 return_value; return_value = 0;
 
-  u32 first_load = 0;
+  static u32 first_load;  first_load = 0;
 
   GUI_ACTION_TYPE gui_action;
   SceCtrlData ctrl_data;
 
-  char game_title[MAX_FILE];
-  //char backup_id[16];
-  u16 *screen_image_ptr = NULL;
-  u16 *current_screen   = NULL;
-  u16 *savestate_screen = NULL;
+  static char game_title[MAX_FILE];
+  static u16 *screen_image_ptr;  screen_image_ptr = NULL;
+  static u16 *current_screen;    current_screen   = NULL;
+  static u16 *savestate_screen;  savestate_screen = NULL;
 
-  u32 savestate_action = 0;
-  static char savestate_timestamps[10][40];  // moved to static to prevent stack overflow
+  static u32 savestate_action;   savestate_action = 0;
+  static char savestate_timestamps[10][40];
 
   char time_str[40];
   char batt_str[40];
   u16 color_batt_life = COLOR_BATT_NORMAL;
-  u32 counter = 0;
+  static u32 counter;  counter = 0;
 
-  char filename_buffer[MAX_PATH];
+  static char filename_buffer[MAX_PATH];
+  static char line_buffer[80];
 
-  char line_buffer[80];
+  static char cheat_format_str[MAX_CHEATS][25*4];
 
-  static char cheat_format_str[MAX_CHEATS][25*4];// gpsp kai 41*4 - moved to static to prevent stack overflow
-
-  MenuType *current_menu;
-  MenuOptionType *current_option;
+  static MenuType *current_menu;
+  static MenuOptionType *current_option;
   MenuOptionType *display_option;
 
-  u32 menu_init_flag = 0;
+  static u32 menu_init_flag;
+  menu_init_flag = 0;
 
-  u32 current_option_num = 0;
+  static u32 current_option_num;
+  current_option_num = 0;
   u32 menu_main_option_num = 0;
 
 
@@ -1394,6 +1509,13 @@ u32 menu(void)
     MSG[MSG_ON]
   };
 
+  const char *filter_options[] =
+  {
+    MSG[MSG_OFF],
+    MSG[MSG_ON],
+    "Sharp Bilinear"
+  };
+
   const char *scale_options[] =
   {
     MSG[MSG_SCN_SCALED_NONE],
@@ -1406,14 +1528,17 @@ u32 menu(void)
   {
     MSG[MSG_AUTO],
     MSG[MSG_MANUAL],
-    MSG[MSG_OFF]
+    MSG[MSG_OFF],
+    MSG[MSG_SMART]
   };
 
   const char *color_correction_options[] =
   {
     MSG[MSG_OFF],
     "GPSP",
-    "Retro"
+    "Retro",
+    "AGS-101 (SP)",
+    "LCD dim (GBA)"
   };
 
   const char *button_mapping_options[] =
@@ -1457,7 +1582,7 @@ u32 menu(void)
 
   const char *aspect_ratio_options[] =
   {
-    "Core Provided (3:2)", "Zoom (Fill Screen)", "Stretch (Full PSP)"
+    "Core Provided (3:2)", "Zoom (Fill Screen)", "Stretch (Full PSP)", "4:3 Pillarbox"
   };
 
   // Since we can't add messages to the message system, use direct string pointers cast as message indices
@@ -1498,6 +1623,8 @@ u32 menu(void)
   };
 
   auto void choose_menu(MenuType *new_menu);
+  auto void choose_prev_menu(void);
+  auto void restore_defaults(void);
 
   auto void menu_init(void);
   auto void menu_term(void);
@@ -1519,6 +1646,11 @@ u32 menu(void)
   auto void submenu_cheats_misc(void);
 
   auto void menu_load_file(void);
+  auto void browse_dir_roms(void);
+  auto void browse_dir_save(void);
+  auto void browse_dir_state(void);
+  auto void browse_dir_cheat(void);
+  auto void browse_dir_snap(void);
 
   auto void submenu_emulator(void);
   auto void submenu_gamepad(void);
@@ -1568,6 +1700,18 @@ u32 menu(void)
     quit();
   }
 
+  void menu_reset(void)
+  {
+    if (!first_load)
+    {
+      reset_gba();
+      reg[CHANGED_PC_STATUS] = 1;
+
+      return_value = 1;
+      repeat = 0;
+    }
+  }
+
   void menu_suspend(void)
   {
     save_game_config_file();
@@ -1604,14 +1748,24 @@ u32 menu(void)
         return;
       }
 
-      // Track recently played game with full path
+      // Track recently played game with full path.
+      // For normal picks load_file() already chdir'd into the game directory,
+      // so getcwd() gives us a reliable absolute path — no dependency on
+      // dir_roms having (or not having) a trailing slash.
       char full_game_path[MAX_PATH];
       if (filename_buffer[0] == '/' || strstr(filename_buffer, ":/")) {
-        // Already a full path
+        // Recent game re-selected: filename_buffer already contains the full path.
         strcpy(full_game_path, filename_buffer);
       } else {
-        // Construct full path
-        sprintf(full_game_path, "%s%s", dir_roms, filename_buffer);
+        // Normal pick: cwd is the directory that contains the selected file.
+        if (getcwd(full_game_path, MAX_PATH) != NULL) {
+          u32 len = strlen(full_game_path);
+          if (full_game_path[len - 1] != '/') { full_game_path[len] = '/'; full_game_path[len + 1] = '\0'; }
+          strcat(full_game_path, filename_buffer);
+        } else {
+          // getcwd failed — fall back to dir_roms (best effort)
+          sprintf(full_game_path, "%s/%s", dir_roms, filename_buffer);
+        }
       }
       add_recent_game(full_game_path);
 
@@ -1638,17 +1792,41 @@ u32 menu(void)
     }
   }
 
-  void menu_reset(void)
+  // Helper: let user browse to a directory and update dir_var + dir.ini.
+  // Intentionally minimal — no calls to other nested functions (menu_init,
+  // choose_menu) to avoid nested-trampoline chains that crash PSP/MIPS.
+  // Navigate with D-pad, enter dirs with O/X, exit with Triangle to confirm.
+  void browse_for_dir(char *dir_var, const char *ini_key)
   {
-    if (!first_load)
-    {
-      reset_gba();
-      reg[CHANGED_PC_STATUS] = 1;
+    const char *no_ext[] = { NULL };
+    char dummy[MAX_PATH];
+    dummy[0] = '\0';
 
-      return_value = 1;
-      repeat = 0;
+    // Pass dir_var directly as the starting directory.
+    // load_file will chdir into it; we read the final cwd afterwards.
+    load_file(no_ext, dummy, dir_var);
+
+    // Save wherever the user ended up (even if they pressed EXIT/cancel —
+    // they navigated there intentionally, so we treat it as the selection).
+    char new_dir[MAX_PATH];
+    if (getcwd(new_dir, MAX_PATH) != NULL) {
+      u32 len = strlen(new_dir);
+      if (len > 0 && new_dir[len - 1] != '/') {
+        new_dir[len]     = '/';
+        new_dir[len + 1] = '\0';
+      }
+      strcpy(dir_var, new_dir);
+      save_dir_ini_entry(ini_key, new_dir);  // non-nested static helper
     }
+    // Return to the menu loop — no choose_menu needed; the loop continues
+    // with current_menu still set to the directories submenu.
   }
+
+  void browse_dir_roms(void)  { browse_for_dir(dir_roms,  "rom_directory"); }
+  void browse_dir_save(void)  { browse_for_dir(dir_save,  "save_directory"); }
+  void browse_dir_state(void) { browse_for_dir(dir_state, "save_state_directory"); }
+  void browse_dir_cheat(void) { browse_for_dir(dir_cheat, "cheat_directory"); }
+  void browse_dir_snap(void)  { browse_for_dir(dir_snap,  "snapshot_directory"); }
 
   void menu_screen_capture(void)
   {
@@ -1746,8 +1924,8 @@ u32 menu(void)
 	option_resume_on_boot = 0; // Default to off
 	option_auto_save_state = 0; // Default to off
 	psp_fps_debug = 0;
-	option_frameskip_type = FRAMESKIP_AUTO;
-	option_frameskip_value = 9;
+	option_frameskip_type = FRAMESKIP_SMART;
+	option_frameskip_value = 3;
 	option_clock_speed = PSP_CLOCK_333;
 	option_sound_volume = 10;
 	option_stack_optimize = 1;
@@ -1756,8 +1934,11 @@ u32 menu(void)
 	option_screen_capture_format = 0;
 	option_enable_analog = 0;
 	option_analog_sensitivity = 4;
-	
-	// Get system language setting
+
+	// Default to English regardless of PSP system language
+	option_language = 1;
+
+	// Get system language setting (kept for reference but we default to English)
 	int id_language;
 	sceUtilityGetSystemParamInt(PSP_SYSTEMPARAM_ID_INT_LANGUAGE, &id_language);
 	// Map PSP system language to our supported languages
@@ -2001,45 +2182,177 @@ u32 menu(void)
 
 
 
+  // Menu navigation stack — must be before the option arrays
+  #define MENU_STACK_MAX 8
+  static MenuType *menu_stack[MENU_STACK_MAX];
+  static int menu_stack_top = 0;
+  menu_stack_top = 0;
+
+  // choose_prev_menu doesn't reference main_menu — safe before MAKE_MENU(main)
+  void choose_prev_menu(void)
+  {
+    if (menu_stack_top > 0) {
+      current_menu = menu_stack[--menu_stack_top];
+      current_option = current_menu->options;
+      current_option_num = 0;
+    }
+  }
+
+  void restore_defaults(void)
+  {
+    option_screen_scale        = SCALED_X15_GU;
+    option_screen_mag          = 170;
+    option_screen_filter       = FILTER_BILINEAR;
+    psp_fps_debug              = 0;
+    option_frameskip_type      = FRAMESKIP_AUTO;
+    option_frameskip_value     = 3;
+    option_clock_speed         = PSP_CLOCK_333;
+    option_sound_volume        = 10;
+    option_stack_optimize      = 1;
+    option_boot_mode           = 0;
+    option_update_backup       = 1;
+    option_screen_capture_format = 0;
+    option_enable_analog       = 0;
+    option_analog_sensitivity  = 4;
+    option_language            = 1;
+    option_aspect_ratio        = 0;
+    option_compatibility_mode  = 0;
+    option_color_correction    = COLOR_CORRECTION_OFF;
+    option_brightness          = BRIGHTNESS_DEFAULT;
+    option_contrast            = CONTRAST_DEFAULT;
+    option_saturation          = SATURATION_DEFAULT;
+    option_colortemp           = COLORTEMP_DEFAULT;
+    option_color_r             = COLOR_RGB_DEFAULT;
+    option_color_g             = COLOR_RGB_DEFAULT;
+    option_color_b             = COLOR_RGB_DEFAULT;
+    option_button_mapping      = 0;
+    option_resume_on_boot      = 0;
+    option_auto_save_state     = 0;
+    rebuild_combined_lut();
+  }
+
   // Marker for help information, don't go past this mark (except \n)------*
-  MenuOptionType emulator_options[] =
+
+  // ── VIDEO SETTINGS SUBMENU ──────────────────────────────────────────────
+  MenuOptionType video_options[] =
   {
     STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_0], scale_options, &option_screen_scale, 4, MSG_OPTION_MENU_HELP_0, 0),
 
     NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_1], &option_screen_mag, 201, MSG_OPTION_MENU_HELP_1, 1),
 
-    {NULL, NULL, NULL, "Aspect Ratio: %s", (void*)aspect_ratio_options, &option_aspect_ratio, 3, 0, 2, STRING_SELECTION_OPTION},
+    {NULL, NULL, NULL, "Aspect Ratio    : %s", (void*)aspect_ratio_options, &option_aspect_ratio, 4, 0, 2, STRING_SELECTION_OPTION},
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], on_off_options, &option_screen_filter, 2, MSG_OPTION_MENU_HELP_2, 3),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_2], filter_options, &option_screen_filter, 3, MSG_OPTION_MENU_HELP_2, 3),
 
-    {NULL, NULL, NULL, "Compatibility Mode: %s", (void*)on_off_options, &option_compatibility_mode, 2, MSG_OPTION_MENU_HELP_7, 5, STRING_SELECTION_OPTION},
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_SHOW_FPS], on_off_options, &psp_fps_debug, 2, MSG_OPTION_MENU_HELP_SHOW_FPS, 4),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_SHOW_FPS], on_off_options, &psp_fps_debug, 2, MSG_OPTION_MENU_HELP_SHOW_FPS, 6),
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_COLOR_CORRECTION], color_correction_options, &option_color_correction, COLOR_CORRECTION_COUNT, MSG_OPTION_MENU_HELP_COLOR_CORRECTION, 5),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_COLOR_CORRECTION], color_correction_options, &option_color_correction, 3, MSG_OPTION_MENU_HELP_COLOR_CORRECTION, 7),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_BRIGHTNESS], &option_brightness, BRIGHTNESS_MAX + 1, MSG_HELP_VIDEO_BRIGHTNESS, 6),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_BUTTON_MAPPING], button_mapping_options, &option_button_mapping, 2, MSG_OPTION_MENU_HELP_BUTTON_MAPPING, 8),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_CONTRAST], &option_contrast, CONTRAST_MAX + 1, MSG_HELP_VIDEO_CONTRAST, 7),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_3], frameskip_options, &option_frameskip_type, 3, MSG_OPTION_MENU_HELP_3, 9),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_SATURATION], &option_saturation, SATURATION_MAX + 1, MSG_HELP_VIDEO_SATURATION, 8),
 
-    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_4], &option_frameskip_value, 10, MSG_OPTION_MENU_HELP_4, 10),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLORTEMP], &option_colortemp, COLORTEMP_MAX + 1, MSG_HELP_VIDEO_COLORTEMP, 9),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_5], clock_speed_options, &option_clock_speed, 4, MSG_OPTION_MENU_HELP_5, 11), 
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_GRID], ((const char*[]){"Off","Subtle","Full GBA"}), &option_grid, GRID_MAX + 1, MSG_HELP_VIDEO_GRID, 10),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_6], sound_volume_options, &option_sound_volume, 11, MSG_OPTION_MENU_HELP_6, 12),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_R], &option_color_r, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 11),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_7], stack_optimize_options, &option_stack_optimize, 2, MSG_OPTION_MENU_HELP_7, 13),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_G], &option_color_g, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 12),
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_8], yes_no_options, &option_boot_mode, 2, MSG_OPTION_MENU_HELP_8, 14),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_VIDEO_COLOR_B], &option_color_b, COLOR_RGB_MAX + 1, MSG_HELP_VIDEO_COLOR_RGB, 13),
 
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 14),
+  };
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_9], update_backup_options, &option_update_backup, 2, MSG_OPTION_MENU_HELP_9, 15), 
+  MAKE_MENU(video, NULL, NULL);
 
-    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 16),
+  // ── PERFORMANCE SUBMENU ─────────────────────────────────────────────────
+  MenuOptionType performance_options[] =
+  {
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_3], frameskip_options, &option_frameskip_type, 4, MSG_OPTION_MENU_HELP_3, 0),
 
-    ACTION_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_DEFAULT], MSG_OPTION_MENU_HELP_DEFAULT, 17),
+    NUMERIC_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_4], &option_frameskip_value, 10, MSG_OPTION_MENU_HELP_4, 1),
 
-    ACTION_SUBMENU_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 18)
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_5], clock_speed_options, &option_clock_speed, 4, MSG_OPTION_MENU_HELP_5, 2),
+
+    {NULL, NULL, NULL, "Compatibility   : %s", (void*)on_off_options, &option_compatibility_mode, 2, MSG_OPTION_MENU_HELP_7, 3, STRING_SELECTION_OPTION},
+
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_7], stack_optimize_options, &option_stack_optimize, 2, MSG_OPTION_MENU_HELP_7, 4),
+
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
+  };
+
+  MAKE_MENU(performance, NULL, NULL);
+
+  // ── AUDIO SUBMENU ───────────────────────────────────────────────────────
+  MenuOptionType audio_options[] =
+  {
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_6], sound_volume_options, &option_sound_volume, 11, MSG_OPTION_MENU_HELP_6, 0),
+
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
+  };
+
+  MAKE_MENU(audio, NULL, NULL);
+
+  // ── CONTROLS SUBMENU ────────────────────────────────────────────────────
+  MenuOptionType controls_options[] =
+  {
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_BUTTON_MAPPING], button_mapping_options, &option_button_mapping, 2, MSG_OPTION_MENU_HELP_BUTTON_MAPPING, 0),
+
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 1),
+  };
+
+  MAKE_MENU(controls, NULL, NULL);
+
+  // ── DIRECTORIES SUBMENU ─────────────────────────────────────────────────
+  MenuOptionType directories_options[] =
+  {
+    ACTION_OPTION(browse_dir_roms,  NULL, MSG[MSG_DIR_ROMS],  MSG_HELP_DIR_ROMS,  0),
+    ACTION_OPTION(browse_dir_save,  NULL, MSG[MSG_DIR_SAVE],  MSG_HELP_DIR_SAVE,  1),
+    ACTION_OPTION(browse_dir_state, NULL, MSG[MSG_DIR_STATE], MSG_HELP_DIR_STATE, 2),
+    ACTION_OPTION(browse_dir_cheat, NULL, MSG[MSG_DIR_CHEAT], MSG_HELP_DIR_CHEAT, 3),
+    ACTION_OPTION(browse_dir_snap,  NULL, MSG[MSG_DIR_SNAP],  MSG_HELP_DIR_SNAP,  4),
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 5),
+  };
+
+  MAKE_MENU(directories, NULL, NULL);
+  update_dir_displays(directories_options);
+
+  // ── SYSTEM SUBMENU ──────────────────────────────────────────────────────
+  MenuOptionType system_options[] =
+  {
+    STRING_SELECTION_OPTION(notify_language_change, MSG[MSG_OPTION_MENU_10], language_options, &option_language, 2, MSG_OPTION_MENU_HELP_10, 0),
+
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_8], yes_no_options, &option_boot_mode, 2, MSG_OPTION_MENU_HELP_8, 1),
+
+    STRING_SELECTION_OPTION(NULL, MSG[MSG_OPTION_MENU_9], update_backup_options, &option_update_backup, 2, MSG_OPTION_MENU_HELP_9, 2),
+
+    SUBMENU_OPTION(&directories_menu, MSG[MSG_SUBMENU_DIRECTORIES], MSG_HELP_SUBMENU_DIRECTORIES, 3),
+
+    ACTION_OPTION(choose_prev_menu, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 4),
+  };
+
+  MAKE_MENU(system, NULL, NULL);
+
+  // ── MAIN EMULATOR OPTIONS MENU ──────────────────────────────────────────
+  MenuOptionType emulator_options[] =
+  {
+    SUBMENU_OPTION(&video_menu, MSG[MSG_SUBMENU_VIDEO], MSG_HELP_SUBMENU_VIDEO, 0),
+
+    SUBMENU_OPTION(&performance_menu, MSG[MSG_SUBMENU_PERFORMANCE], MSG_HELP_SUBMENU_PERFORMANCE, 1),
+
+    SUBMENU_OPTION(&audio_menu, MSG[MSG_SUBMENU_AUDIO], MSG_HELP_SUBMENU_AUDIO, 2),
+
+    SUBMENU_OPTION(&controls_menu, MSG[MSG_SUBMENU_CONTROLS], MSG_HELP_SUBMENU_CONTROLS, 3),
+
+    SUBMENU_OPTION(&system_menu, MSG[MSG_SUBMENU_SYSTEM], MSG_HELP_SUBMENU_SYSTEM, 4),
+
+    ACTION_OPTION(restore_defaults, NULL, MSG[MSG_OPTION_MENU_DEFAULT], MSG_OPTION_MENU_HELP_DEFAULT, 5),
+
+    ACTION_SUBMENU_OPTION(NULL, NULL, MSG[MSG_OPTION_MENU_11], MSG_OPTION_MENU_HELP_11, 6)
   };
 
   MAKE_MENU(emulator, NULL, NULL);
@@ -2047,24 +2360,49 @@ u32 menu(void)
   // Overlay menu is now initialized globally to avoid scope issues
   // The overlay_options_global and overlay_menu_global are used directly from main menu
 
-  MenuOptionType cheats_misc_options[] =
+  // Declared static so reload_cheats_page (defined before this array) can access it.
+  // Initialized at runtime by reload_cheats_page() — not at compile time.
+  static MenuOptionType cheats_misc_options[12];  // 10 cheats + page selector + back
+
+  // Must be defined BEFORE MAKE_MENU(cheats_misc) which sizes from this array
+  void reload_cheats_page()
   {
-    CHEAT_OPTION((10 * menu_cheat_page) + 0),
-    CHEAT_OPTION((10 * menu_cheat_page) + 1),
-    CHEAT_OPTION((10 * menu_cheat_page) + 2),
-    CHEAT_OPTION((10 * menu_cheat_page) + 3),
-    CHEAT_OPTION((10 * menu_cheat_page) + 4),
-    CHEAT_OPTION((10 * menu_cheat_page) + 5),
-    CHEAT_OPTION((10 * menu_cheat_page) + 6),
-    CHEAT_OPTION((10 * menu_cheat_page) + 7),
-    CHEAT_OPTION((10 * menu_cheat_page) + 8),
-    CHEAT_OPTION((10 * menu_cheat_page) + 9),
-
-    NUMERIC_SELECTION_OPTION(reload_cheats_page, MSG[MSG_CHEAT_MENU_3], &menu_cheat_page, MAX_CHEATS_PAGE, MSG_CHEAT_MENU_HELP_3, 11),
-    ACTION_OPTION(NULL, NULL, MSG[MSG_CHEAT_MENU_1], MSG_CHEAT_MENU_HELP_1, 13),
-
-    SUBMENU_OPTION(NULL, MSG[MSG_CHEAT_MENU_2], MSG_CHEAT_MENU_HELP_2, 15)
-  };
+    for(i = 0; i < 10; i++)
+    {
+      cheats_misc_options[i].action_function  = NULL;
+      cheats_misc_options[i].passive_function = NULL;
+      cheats_misc_options[i].sub_menu         = NULL;
+      cheats_misc_options[i].display_string   = cheat_format_str[(10 * menu_cheat_page) + i];
+      cheats_misc_options[i].options          = enable_disable_options;
+      cheats_misc_options[i].current_option   = &(cheats[(10 * menu_cheat_page) + i].cheat_active);
+      cheats_misc_options[i].num_options      = 2;
+      cheats_misc_options[i].help_string      = MSG_CHEAT_MENU_HELP_0;
+      cheats_misc_options[i].line_number      = i;
+      cheats_misc_options[i].option_type      = STRING_SELECTION_OPTION;
+    }
+    // Entry 10: page selector (NUMERIC_SELECTION_OPTION)
+    cheats_misc_options[10].action_function  = reload_cheats_page;
+    cheats_misc_options[10].passive_function = NULL;
+    cheats_misc_options[10].sub_menu         = NULL;
+    cheats_misc_options[10].display_string   = MSG[MSG_CHEAT_MENU_3];
+    cheats_misc_options[10].options          = NULL;
+    cheats_misc_options[10].current_option   = &menu_cheat_page;
+    cheats_misc_options[10].num_options      = MAX_CHEATS_PAGE;
+    cheats_misc_options[10].help_string      = MSG_CHEAT_MENU_HELP_3;
+    cheats_misc_options[10].line_number      = 11;
+    cheats_misc_options[10].option_type      = NUMBER_SELECTION_OPTION;
+    // Entry 11: back (ACTION_OPTION)
+    cheats_misc_options[11].action_function  = NULL;
+    cheats_misc_options[11].passive_function = NULL;
+    cheats_misc_options[11].sub_menu         = NULL;
+    cheats_misc_options[11].display_string   = MSG[MSG_CHEAT_MENU_1];
+    cheats_misc_options[11].options          = NULL;
+    cheats_misc_options[11].current_option   = NULL;
+    cheats_misc_options[11].num_options      = 0;
+    cheats_misc_options[11].help_string      = MSG_CHEAT_MENU_HELP_1;
+    cheats_misc_options[11].line_number      = 13;
+    cheats_misc_options[11].option_type      = ACTION_OPTION;
+  }
 
   MAKE_MENU(cheats_misc, NULL, NULL);
 
@@ -2081,12 +2419,12 @@ u32 menu(void)
     SAVESTATE_OPTION(8),
     SAVESTATE_OPTION(9),
 
-    ACTION_OPTION(NULL, NULL, MSG[MSG_STATE_MENU_1], MSG_STATE_MENU_HELP_1, 11),
+    ACTION_OPTION(menu_load_state_file, NULL, MSG[MSG_STATE_MENU_1], MSG_STATE_MENU_HELP_1, 11),
 
     ACTION_SUBMENU_OPTION(NULL, NULL, MSG[MSG_STATE_MENU_2], MSG_STATE_MENU_HELP_2, 13)
   };
 
-  MAKE_MENU(savestate, NULL, NULL);
+  MAKE_MENU(savestate, submenu_savestate, NULL);
 
   MenuOptionType gamepad_config_options[] =
   {
@@ -2157,36 +2495,150 @@ u32 menu(void)
 
   MAKE_MENU(main, NULL, NULL);
 
-
-  void choose_menu(MenuType *new_menu)
+  // Defined here so all option arrays above are in scope.
+  // Called by passive_function on the language option: updates all captured
+  // display_string pointers and value-option arrays to the new language.
+  void on_language_change(void)
   {
-    printf("DEBUG: choose_menu called with menu: %p\n", new_menu);
-    
-    if (new_menu == NULL) {
-      printf("DEBUG: new_menu was NULL, using main_menu\n");
-      new_menu = &main_menu;
-    }
+    // Update value-option arrays (choices shown when cycling)
+    yes_no_options[0]           = MSG[MSG_NO];
+    yes_no_options[1]           = MSG[MSG_YES];
+    global_yes_no_options[0]    = MSG[MSG_NO];
+    global_yes_no_options[1]    = MSG[MSG_YES];
+    enable_disable_options[0]   = MSG[MSG_DISABLED];
+    enable_disable_options[1]   = MSG[MSG_ENABLED];
+    on_off_options[0]           = MSG[MSG_OFF];
+    on_off_options[1]           = MSG[MSG_ON];
+    filter_options[0]           = MSG[MSG_OFF];
+    filter_options[1]           = MSG[MSG_ON];
+    scale_options[0]            = MSG[MSG_SCN_SCALED_NONE];
+    scale_options[1]            = MSG[MSG_SCN_SCALED_X15_GU];
+    scale_options[2]            = MSG[MSG_SCN_SCALED_X15_SW];
+    scale_options[3]            = MSG[MSG_SCN_SCALED_USER];
+    frameskip_options[0]        = MSG[MSG_AUTO];
+    frameskip_options[1]        = MSG[MSG_MANUAL];
+    frameskip_options[2]        = MSG[MSG_OFF];
+    frameskip_options[3]        = MSG[MSG_SMART];
+    stack_optimize_options[0]   = MSG[MSG_OFF];
+    stack_optimize_options[1]   = MSG[MSG_AUTO];
+    update_backup_options[0]    = MSG[MSG_EXITONLY];
+    update_backup_options[1]    = MSG[MSG_AUTO];
+    language_options[0]         = MSG[MSG_LANG_JAPANESE];
+    language_options[1]         = MSG[MSG_LANG_ENGLISH];
 
-    printf("DEBUG: Setting current_menu to %p\n", new_menu);
-    current_menu = new_menu;
-    
-    printf("DEBUG: new_menu->options = %p\n", new_menu->options);
-    printf("DEBUG: Setting current_option to %p\n", new_menu->options);
-    current_option = new_menu->options;
-    
-    printf("DEBUG: Setting current_option_num to 0\n");
-    current_option_num = 0;
-    
-    printf("DEBUG: choose_menu completed successfully\n");
+    // Update display_string in main_options
+    main_options[0].display_string  = MSG[MSG_MAIN_MENU_0];
+    main_options[1].display_string  = MSG[MSG_MAIN_MENU_1];
+    main_options[2].display_string  = MSG[MSG_MAIN_MENU_2];
+    main_options[3].display_string  = MSG[MSG_MAIN_MENU_3];
+    main_options[4].display_string  = MSG[MSG_MAIN_MENU_4];
+    main_options[5].display_string  = MSG[MSG_MAIN_MENU_5];
+    main_options[6].display_string  = MSG[MSG_MAIN_MENU_6];
+    // [7] = "Saving options" — hardcoded, skip
+    main_options[8].display_string  = MSG[MSG_MAIN_MENU_CHEAT];
+    main_options[9].display_string  = MSG[MSG_MAIN_MENU_OVERLAY];
+    main_options[10].display_string = MSG[MSG_MAIN_MENU_7];
+    main_options[11].display_string = MSG[MSG_MAIN_MENU_8];
+    main_options[12].display_string = MSG[MSG_MAIN_MENU_9];
+    main_options[13].display_string = MSG[MSG_MAIN_MENU_11];
+
+    // Update display_string in emulator_options
+    emulator_options[0].display_string = MSG[MSG_SUBMENU_VIDEO];
+    emulator_options[1].display_string = MSG[MSG_SUBMENU_PERFORMANCE];
+    emulator_options[2].display_string = MSG[MSG_SUBMENU_AUDIO];
+    emulator_options[3].display_string = MSG[MSG_SUBMENU_CONTROLS];
+    emulator_options[4].display_string = MSG[MSG_SUBMENU_SYSTEM];
+    emulator_options[5].display_string = MSG[MSG_OPTION_MENU_DEFAULT];
+    emulator_options[6].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in video_options
+    video_options[0].display_string  = MSG[MSG_OPTION_MENU_0];
+    video_options[1].display_string  = MSG[MSG_OPTION_MENU_1];
+    // [2] = "Aspect Ratio: %s" — hardcoded, skip
+    video_options[3].display_string  = MSG[MSG_OPTION_MENU_2];
+    video_options[4].display_string  = MSG[MSG_OPTION_MENU_SHOW_FPS];
+    video_options[5].display_string  = MSG[MSG_OPTION_MENU_COLOR_CORRECTION];
+    video_options[6].display_string  = MSG[MSG_VIDEO_BRIGHTNESS];
+    video_options[7].display_string  = MSG[MSG_VIDEO_CONTRAST];
+    video_options[8].display_string  = MSG[MSG_VIDEO_SATURATION];
+    video_options[9].display_string  = MSG[MSG_VIDEO_COLORTEMP];
+    video_options[10].display_string = MSG[MSG_VIDEO_GRID];
+    video_options[11].display_string = MSG[MSG_VIDEO_COLOR_R];
+    video_options[12].display_string = MSG[MSG_VIDEO_COLOR_G];
+    video_options[13].display_string = MSG[MSG_VIDEO_COLOR_B];
+    video_options[14].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in performance_options
+    performance_options[0].display_string = MSG[MSG_OPTION_MENU_3];
+    performance_options[1].display_string = MSG[MSG_OPTION_MENU_4];
+    performance_options[2].display_string = MSG[MSG_OPTION_MENU_5];
+    // [3] = "Compatibility: %s" — hardcoded, skip
+    performance_options[4].display_string = MSG[MSG_OPTION_MENU_7];
+    performance_options[5].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in audio_options
+    audio_options[0].display_string = MSG[MSG_OPTION_MENU_6];
+    audio_options[1].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in controls_options
+    controls_options[0].display_string = MSG[MSG_OPTION_MENU_BUTTON_MAPPING];
+    controls_options[1].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in system_options
+    system_options[0].display_string = MSG[MSG_OPTION_MENU_10];
+    system_options[1].display_string = MSG[MSG_OPTION_MENU_8];
+    system_options[2].display_string = MSG[MSG_OPTION_MENU_9];
+    system_options[3].display_string = MSG[MSG_SUBMENU_DIRECTORIES];
+    system_options[4].display_string = MSG[MSG_OPTION_MENU_11];
+
+    // Update display_string in directories_options
+    directories_options[0].display_string = MSG[MSG_DIR_ROMS];
+    directories_options[1].display_string = MSG[MSG_DIR_SAVE];
+    directories_options[2].display_string = MSG[MSG_DIR_STATE];
+    directories_options[3].display_string = MSG[MSG_DIR_CHEAT];
+    directories_options[4].display_string = MSG[MSG_DIR_SNAP];
+    directories_options[5].display_string = MSG[MSG_OPTION_MENU_11];
+    update_dir_displays(directories_options);
+
+    // Update display_string in gamepad_config_options
+    gamepad_config_options[0].display_string  = MSG[MSG_PAD_MENU_0];
+    gamepad_config_options[1].display_string  = MSG[MSG_PAD_MENU_1];
+    gamepad_config_options[2].display_string  = MSG[MSG_PAD_MENU_2];
+    gamepad_config_options[3].display_string  = MSG[MSG_PAD_MENU_3];
+    gamepad_config_options[4].display_string  = MSG[MSG_PAD_MENU_4];
+    gamepad_config_options[5].display_string  = MSG[MSG_PAD_MENU_5];
+    gamepad_config_options[6].display_string  = MSG[MSG_PAD_MENU_6];
+    gamepad_config_options[7].display_string  = MSG[MSG_PAD_MENU_7];
+    gamepad_config_options[8].display_string  = MSG[MSG_PAD_MENU_8];
+    gamepad_config_options[9].display_string  = MSG[MSG_PAD_MENU_9];
+    gamepad_config_options[10].display_string = MSG[MSG_PAD_MENU_10];
+    gamepad_config_options[11].display_string = MSG[MSG_PAD_MENU_11];
+    gamepad_config_options[12].display_string = MSG[MSG_PAD_MENU_12];
+
+    // Update display_string in analog_config_options
+    analog_config_options[0].display_string = MSG[MSG_A_PAD_MENU_0];
+    analog_config_options[1].display_string = MSG[MSG_A_PAD_MENU_1];
+    analog_config_options[2].display_string = MSG[MSG_A_PAD_MENU_2];
+    analog_config_options[3].display_string = MSG[MSG_A_PAD_MENU_3];
+    analog_config_options[4].display_string = MSG[MSG_A_PAD_MENU_4];
+    analog_config_options[5].display_string = MSG[MSG_A_PAD_MENU_5];
+    analog_config_options[6].display_string = MSG[MSG_A_PAD_MENU_6];
+
+    // Update savestate_options load/back entries
+    savestate_options[10].display_string = MSG[MSG_STATE_MENU_1];
+    savestate_options[11].display_string = MSG[MSG_STATE_MENU_2];
   }
 
-  void reload_cheats_page()
+  // choose_menu references main_menu — must be AFTER MAKE_MENU(main)
+  void choose_menu(MenuType *new_menu)
   {
-    for(i = 0; i<10; i++)
-    {
-      cheats_misc_options[i].display_string = cheat_format_str[(10 * menu_cheat_page) + i];
-      cheats_misc_options[i].current_option = &(cheats[(10 * menu_cheat_page) + i].cheat_active);
-    }
+    if (new_menu == NULL)
+      new_menu = &main_menu;
+    if (menu_stack_top < MENU_STACK_MAX)
+      menu_stack[menu_stack_top++] = current_menu;
+    current_menu = new_menu;
+    current_option = new_menu->options;
+    current_option_num = 0;
   }
 
 
@@ -2276,8 +2728,31 @@ u32 menu(void)
       }
     }
 
-	print_string(MSG[current_option->help_string], 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
-    print_string("FrogGBA - TempGBA mod by Prosty", 270, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+    // Print help text with dynamic button labels based on current mapping
+    // mapping=0 (X/O): confirm=O, cancel=X
+    // mapping=1 (O/X): confirm=X, cancel=O
+    {
+      const char *raw_help = MSG[current_option->help_string];
+      if (raw_help && (strstr(raw_help, "X:") || strstr(raw_help, "O:"))) {
+        static char help_buf[80];
+        const char *confirm = (option_button_mapping == 0) ? "O" : "X";
+        const char *cancel  = (option_button_mapping == 0) ? "X" : "O";
+        char *dst = help_buf;
+        const char *src = raw_help;
+        while (*src && (dst - help_buf) < 78) {
+          if (src[1] == ':') {
+            if (src[0] == 'X') { *dst++ = *confirm; src++; continue; }
+            if (src[0] == 'O') { *dst++ = *cancel;  src++; continue; }
+          }
+          *dst++ = *src++;
+        }
+        *dst = '\0';
+        print_string(help_buf, 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+      } else {
+        print_string(raw_help ? raw_help : "", 30, 258, COLOR_HELP_TEXT, BG_NO_FILL);
+      }
+    }
+    print_string("ToadGBA", 434, 258, COLOR_HELP_TEXT, BG_NO_FILL);
 
     // PSP controller - hold
     if (get_pad_input(PSP_CTRL_HOLD) != 0)
@@ -2313,6 +2788,12 @@ u32 menu(void)
 
           if (current_option->passive_function != NULL)
             current_option->passive_function();
+
+          if (language_change_pending)
+          {
+            language_change_pending = 0;
+            on_language_change();
+          }
         }
         break;
 
@@ -2330,6 +2811,12 @@ u32 menu(void)
 
           if (current_option->passive_function != NULL)
             current_option->passive_function();
+
+          if (language_change_pending)
+          {
+            language_change_pending = 0;
+            on_language_change();
+          }
         }
         break;
 
@@ -2349,25 +2836,6 @@ u32 menu(void)
         break;
 
       case CURSOR_DEFAULT:
-	  {
-        /*if (current_menu == &emulator_menu)
-		{	
-			option_screen_scale = SCALED_X15_GU;
-			option_screen_mag = 170;
-			option_screen_filter = FILTER_BILINEAR;
-			psp_fps_debug = 0;
-			option_frameskip_type = FRAMESKIP_AUTO;
-			option_frameskip_value = 9;
-			option_clock_speed = PSP_CLOCK_333;
-			option_sound_volume = 10;
-			option_stack_optimize = 1;
-			option_boot_mode = 0;
-			option_update_backup = 0;
-			option_screen_capture_format = 0;
-			option_enable_analog = 0;
-			option_analog_sensitivity = 4;
-		}*/
-	}
         break;
 
       case CURSOR_EXIT:
@@ -2377,8 +2845,7 @@ u32 menu(void)
         }
         else
         {
-          menu_init();
-          choose_menu(&main_menu);
+          choose_prev_menu();
         }
         break;
 
@@ -2393,19 +2860,27 @@ u32 menu(void)
 
           case ACTION_OPTION:
             if (current_option->action_function != NULL)
+            {
               current_option->action_function();
+              if (current_menu == &directories_menu)
+                update_dir_displays(directories_menu.options);
+            }
             else
             {
               // Handle menu actions inline to avoid corrupted function pointers
               switch (current_option->line_number)
               {
                 case 0:  // Load State
-                  action_loadstate();
-                  repeat = 0;  // Return to game after load
+                  if (gamepak_filename[0] != '\0') {
+                    action_loadstate();
+                    repeat = 0;  // Return to game after load
+                  }
                   break;
-                case 1:  // Save State  
-                  action_savestate();
-                  repeat = 0;  // Return to game after save
+                case 1:  // Save State
+                  if (gamepak_filename[0] != '\0') {
+                    action_savestate();
+                    repeat = 0;  // Return to game after save
+                  }
                   break;
                 case 13: // "Load Game"
                   menu_load_file();
@@ -2436,6 +2911,7 @@ u32 menu(void)
         break;
 
       case CURSOR_BACK:
+        break;
       case CURSOR_NONE:
         break;
     }
@@ -2454,6 +2930,9 @@ u32 menu(void)
 
   set_sound_volume();
   set_cpu_clock(option_clock_speed);
+
+  // Rebuild combined color+brightness LUT with any new settings
+  rebuild_combined_lut();
 
   sceDisplayWaitVblankStart();
   video_resolution_small();
@@ -2720,10 +3199,19 @@ s32 save_config_file(void)
     file_options[22]  = option_button_mapping;
     file_options[23]  = option_resume_on_boot;
     file_options[24]  = option_auto_save_state;
+    file_options[25]  = option_brightness;
+    file_options[26]  = option_contrast;
+    file_options[27]  = option_saturation;
+    file_options[28]  = option_colortemp;
+    file_options[29]  = 0; // reserved (was sharpness)
+    file_options[30]  = option_grid;
+    file_options[31]  = option_color_r;
+    file_options[32]  = option_color_g;
+    file_options[33]  = option_color_b;
 
     for (i = 0; i < 16; i++)
     {
-      file_options[25 + i] = gamepad_config_map[i];
+      file_options[34 + i] = gamepad_config_map[i];
     }
 
     FILE_WRITE_ARRAY(config_file, file_options);
@@ -2768,7 +3256,7 @@ s32 load_game_config_file(void)
 
       option_screen_scale   = file_options[0] % 4;
       option_screen_mag     = file_options[1] % 201;
-      option_screen_filter  = file_options[2] % 2;
+      option_screen_filter  = file_options[2] % 4;
       option_frameskip_type  = file_options[3] % 3;
       option_frameskip_value = file_options[4];
       option_clock_speed     = file_options[5] % 4;
@@ -2785,8 +3273,8 @@ s32 load_game_config_file(void)
       if ((enable_home_menu == 0) && (menu_button == -1))
         gamepad_config_map[0] = BUTTON_ID_MENU;
 
-      if (option_frameskip_value > 9)
-        option_frameskip_value = 9;
+      if (option_frameskip_value > 3)
+        option_frameskip_value = 3;
 
 	  u32 j;
       for(j = 0; j < MAX_CHEATS; j++)
@@ -2801,8 +3289,8 @@ s32 load_game_config_file(void)
     }
   }
 
-  option_frameskip_type = FRAMESKIP_AUTO;
-  option_frameskip_value = 9;
+  option_frameskip_type = FRAMESKIP_SMART;
+  option_frameskip_value = 3;
   option_clock_speed = PSP_CLOCK_333;
 
   return -1;
@@ -2832,7 +3320,7 @@ s32 load_config_file(void)
 
       option_screen_scale   = file_options[0] % 4;
       option_screen_mag     = file_options[1] % 201;
-      option_screen_filter  = file_options[2] % 2;
+      option_screen_filter  = file_options[2] % 4;
       psp_fps_debug       = file_options[3] % 2;
       option_frameskip_type  = file_options[4] % 3;
       option_frameskip_value = file_options[5];
@@ -2845,23 +3333,32 @@ s32 load_config_file(void)
       option_enable_analog  = file_options[12] % 2;
       option_analog_sensitivity = file_options[13] % 10;
       option_language = file_options[14] % 2;  // Only Japanese (0) and English (1)
-      option_color_correction = file_options[15] % 3;  // 0 = Off, 1 = GPSP, 2 = Retro
+      option_color_correction = file_options[15] % COLOR_CORRECTION_COUNT;
       option_overlay_enabled = file_options[16] % 2;  // 0 = Off, 1 = On
       option_overlay_selected = file_options[17] % 10;  // 0-9 overlay selection
       option_overlay_offset_x = file_options[18] % 241;  // 0-240 X offset
       option_overlay_offset_y = file_options[19] % 113;  // 0-112 Y offset
-      option_aspect_ratio = file_options[20] % 3;  // 0-2 aspect ratio
+      option_aspect_ratio = file_options[20] % 4;  // 0-3 aspect ratio
       option_compatibility_mode = file_options[21] % 2;  // 0 = Fast, 1 = Accurate
       option_button_mapping = file_options[22] % 2;  // 0 = X/O, 1 = O/X
       option_resume_on_boot = file_options[23] % 2;  // 0 = Off, 1 = On
       option_auto_save_state = file_options[24] % 2; // 0 = Off, 1 = On
-      
+      option_brightness = file_options[25] % (BRIGHTNESS_MAX + 1);
+      option_contrast   = file_options[26] % (CONTRAST_MAX   + 1);
+      option_saturation = file_options[27] % (SATURATION_MAX + 1);
+      option_colortemp  = file_options[28] % (COLORTEMP_MAX  + 1);
+      // file_options[29] reserved (was sharpness — always ignored)
+      option_grid       = file_options[30] % (GRID_MAX       + 1);
+      option_color_r    = file_options[31] % (COLOR_RGB_MAX  + 1);
+      option_color_g    = file_options[32] % (COLOR_RGB_MAX  + 1);
+      option_color_b    = file_options[33] % (COLOR_RGB_MAX  + 1);
+
       // Update memory timing when loading config
       set_compatibility_mode(option_compatibility_mode);
 
       for (i = 0; i < 16; i++)
       {
-        gamepad_config_map[i] = file_options[25 + i] % (BUTTON_ID_NONE + 1);
+        gamepad_config_map[i] = file_options[34 + i] % (BUTTON_ID_NONE + 1);
 
         if (gamepad_config_map[i] == BUTTON_ID_MENU)
           menu_button = i;
@@ -2888,10 +3385,17 @@ s32 load_config_file(void)
   option_enable_analog = 0;
   option_analog_sensitivity = 4;
   option_language = 1;  // Default to English
-  option_color_correction = 0;  // Default to Off
+  option_color_correction = COLOR_CORRECTION_OFF;  // Default to Off
+  option_brightness = BRIGHTNESS_DEFAULT;
+  option_contrast   = CONTRAST_DEFAULT;
+  option_saturation = SATURATION_DEFAULT;
+  option_colortemp  = COLORTEMP_DEFAULT;
+  option_grid       = GRID_DEFAULT;
   option_button_mapping = 0;  // Default to X/O mapping
   option_resume_on_boot = 0;  // Default to Off
   option_auto_save_state = 0; // Default to Off
+
+  rebuild_combined_lut();
 
   return -1;
 }
@@ -2946,16 +3450,19 @@ s32 load_dir_cfg(char *file_name)
       }
       else
       {
-        sprintf(str_buf, MSG[MSG_ERR_SET_DIR_0], current_variable);
-	    print_string(str_buf, 7, str_line, COLOR15_WHITE, COLOR15_BLACK);
-        str_line += FONTHEIGHT;
-
-        strcpy(dir_name, main_path);
-        
-        // Special case: overlay directory should have /overlays/ suffix
-        if (strcasecmp(item_name, "overlay_directory") == 0)
+        // Directory doesn't exist — try to create it silently
+        sceIoMkdir(current_value, 0777);
+        if ((check_dir = sceIoDopen(current_value)) >= 0)
         {
-          strcat(dir_name, "overlays/");
+          strcpy(dir_name, current_value);
+          sceIoDclose(check_dir);
+        }
+        else
+        {
+          // Still can't access — fall back silently to main_path
+          strcpy(dir_name, main_path);
+          if (strcasecmp(item_name, "overlay_directory") == 0)
+            strcat(dir_name, "overlays/");
         }
       }
     }
@@ -2965,17 +3472,10 @@ s32 load_dir_cfg(char *file_name)
   {
     if (dir_name[0] == 0)
     {
-      sprintf(str_buf, MSG[MSG_ERR_SET_DIR_1], item_name);
-	  print_string(str_buf, 7, str_line, COLOR15_WHITE, COLOR15_BLACK);
-      str_line += FONTHEIGHT;
-
       strcpy(dir_name, main_path);
-      
-      // Special case: overlay directory should have /overlays/ suffix
       if (strcasecmp(item_name, "overlay_directory") == 0)
-      {
         strcat(dir_name, "overlays/");
-      }
+      sceIoMkdir(dir_name, 0777);
     }
   }
 
@@ -3023,16 +3523,6 @@ s32 load_dir_cfg(char *file_name)
     }
     
     check_directory(dir_overlay, item_overlay);
-
-    if (str_line > 7)
-    {
-      sprintf(str_buf, MSG[MSG_ERR_SET_DIR_2], main_path);
-      sprintf(str_buf, "%s\n\n%s", str_buf, MSG[MSG_ERR_CONT]);
-
-      str_line += FONTHEIGHT;
-	  print_string(str_buf, 7, str_line, COLOR15_WHITE, COLOR15_BLACK);
-      error_msg("", CONFIRMATION_NONE);
-    }
 
     return 0;
   }

@@ -29,7 +29,7 @@
 #define STACK_SIZE_KB  (512)
 #define ATTRIBUTE      (THREAD_ATTR_USER | PSP_THREAD_ATTR_CLEAR_STACK)
 
-PSP_MODULE_INFO("PSP FrogGBA", PSP_MODULE_USER, 0, 9);
+PSP_MODULE_INFO("PSP ToadGBA", PSP_MODULE_USER, 0, 9);
 PSP_MAIN_THREAD_PARAMS(PRIORITY, STACK_SIZE_KB, ATTRIBUTE);
 PSP_HEAP_SIZE_KB(-800);
 
@@ -54,8 +54,8 @@ u32 option_overlay_selected = 0;
 u32 option_overlay_offset_x = 120;  // X offset for game screen (0-240) - default center
 u32 option_overlay_offset_y = 56;   // Y offset for game screen (0-112) - default center
 
-u32 option_frameskip_type = FRAMESKIP_AUTO;
-u32 option_frameskip_value = 9;
+u32 option_frameskip_type = FRAMESKIP_SMART;
+u32 option_frameskip_value = 3;
 u32 option_clock_speed = PSP_CLOCK_333;
 
 char main_path[MAX_PATH];
@@ -67,12 +67,19 @@ u32 sleep_flag = 0;
 
 u32 synchronize_flag = 1;
 u32 psp_fps_debug = 0;
-u32 option_color_correction = 0;
+u32 option_color_correction = COLOR_CORRECTION_OFF;
+u32 option_brightness = BRIGHTNESS_DEFAULT;
+u32 option_contrast   = CONTRAST_DEFAULT;
+u32 option_saturation = SATURATION_DEFAULT;
+u32 option_colortemp  = COLORTEMP_DEFAULT;
+u32 option_grid       = GRID_DEFAULT;
+u32 option_color_r    = COLOR_RGB_DEFAULT;
+u32 option_color_g    = COLOR_RGB_DEFAULT;
+u32 option_color_b    = COLOR_RGB_DEFAULT;
 u32 option_button_mapping = 0;  // 0 = X/O (X confirm, O cancel), 1 = O/X (O confirm, X cancel)
 u32 option_resume_on_boot = 0;  // 0 = off, 1 = on
 u32 option_auto_save_state = 0; // 0 = off, 1 = on
 u32 fast_forward_speed = 0;  // 0 = 1x (off), 1 = 2x, 2 = 3x
-u32 layer_merge_enabled = 1;  // Layer merging optimization
 
 u32 real_frame_count = 0;
 u32 virtual_frame_count = 0;
@@ -198,15 +205,6 @@ CPU_ALERT_TYPE timer_control_high(u8 timer_number, u32 value)
         tm->status = TIMER_PRESCALE;
         u32 prescale_index = value & 0x03;
         tm->prescale = prescale_table[prescale_index];
-        
-#ifdef PSP_TIMER_OPTIMIZATIONS
-        // Timer prescaling optimization - RE-ENABLED FOR TESTING
-        // Testing to see if this causes timing issues
-        // For prescale values 64+ (index 2,3), reduce precision for performance
-        if (prescale_index >= 2 && timer_number >= 2) {
-          tm->prescale = prescale_table[prescale_index] >> 1;  // Half prescale for better performance
-        }
-#endif
       }
 
       tm->irq = (value >> 6) & 0x01;
@@ -543,6 +541,13 @@ static void synchronize(void)
 {
   static s32 fps = 60;
   static s32 frames_drawn = 60;
+  // Timestamp recorded at the end of each synchronize() call (after any
+  // vblank wait), used to measure pure GBA frame computation time.
+  static u64 last_sync_end_us = 0;
+
+  // Measure now, before any vblank wait, so that (now_us - last_sync_end_us)
+  // equals the time spent in actual GBA emulation for this frame.
+  u64 now_us = ticker();
 
   u32 used_frameskip_type  = option_frameskip_type;
   u32 used_frameskip_value = option_frameskip_value;
@@ -551,7 +556,7 @@ static void synchronize(void)
 
   if (frames == 60)
   {
-    fps = 3600 / vblank_count;
+    fps = (vblank_count > 0) ? (3600 / vblank_count) : 0;
     frames_drawn = 60 - interval_skipped_frames;
 
     vblank_count = 0;
@@ -576,7 +581,7 @@ static void synchronize(void)
     if (psp_fps_debug != 0)
     {
       char print_buffer[80];
-      sprintf(print_buffer, "%02ld(%02ld)", 
+      sprintf(print_buffer, "%02ld(%02ld)",
               (long)fps, (long)frames_drawn);
       print_string(print_buffer, 0, 0, COLOR15_WHITE, COLOR15_BLACK);
     }
@@ -586,7 +591,7 @@ static void synchronize(void)
   {
     char turbo_msg[32];
     sprintf(turbo_msg, "%s %lux", MSG[MSG_TURBO], fast_forward_speed + 2);
-    
+
     if (psp_fps_debug != 0)
 	{
 			print_string_gbk(turbo_msg, 0, 12, COLOR15_WHITE, COLOR15_BLACK);
@@ -596,8 +601,8 @@ static void synchronize(void)
 		print_string_gbk(turbo_msg, 0, 0, COLOR15_WHITE, COLOR15_BLACK);
 	}
     used_frameskip_type = FRAMESKIP_MANUAL;
-    // Use different frameskip values: 2x = skip 1, 3x = skip 2
-    used_frameskip_value = (fast_forward_speed == 0) ? 1 : 2;
+    // Scale skip value with speed: 2x→skip1, 3x→skip2, 4x→skip3
+    used_frameskip_value = fast_forward_speed + 1;
   }
 
   skip_next_frame = 0;
@@ -606,7 +611,7 @@ static void synchronize(void)
   if (real_frame_count >= virtual_frame_count)
   {
     if ((real_frame_count > virtual_frame_count) &&
-        (used_frameskip_type == FRAMESKIP_AUTO) &&
+        (used_frameskip_type == FRAMESKIP_AUTO || used_frameskip_type == FRAMESKIP_SMART) &&
         (num_skipped_frames < option_frameskip_value))
     {
       skip_next_frame = 1;
@@ -631,6 +636,50 @@ static void synchronize(void)
 
     num_skipped_frames = 0;
   }
+
+  // Predictive frameskip (SMART mode only): accumulate the per-frame time
+  // excess and skip once the debt reaches a full frame budget (16667 µs).
+  //
+  // The old single-frame threshold (> 16667 µs) fired on EVERY rendered frame
+  // for games running at ~22 ms/frame, producing a render/skip/render/skip
+  // alternation that settled at 30 FPS.
+  //
+  // The debt accumulator fires at the same net rate as the reactive counter
+  // (one skip per N slow frames) but one frame earlier, without oscillating:
+  //   - Each frame adds (emulation_time - 16667) to the debt.
+  //   - When debt >= 16667 µs (one full frame of accumulated lag), the next
+  //     frame is skipped and 16667 µs is deducted from the debt.
+  //   - Skipped frames are fast (~5 ms of emulation, no rendering), so debt
+  //     naturally decreases after a skip, preventing back-to-back skips.
+  //   - If the reactive already fired this frame (real > virtual), debt is
+  //     reset so the predictive doesn't pile on immediately afterwards.
+  static s64 smart_debt_us = 0;
+  if (used_frameskip_type == FRAMESKIP_SMART && last_sync_end_us != 0)
+  {
+    smart_debt_us += (s64)(now_us - last_sync_end_us) - 16667LL;
+    // Cap credit at one frame so a stretch of fast frames doesn't suppress
+    // the predictive for an unreasonably long time afterwards.
+    if (smart_debt_us < -16667LL)
+      smart_debt_us = -16667LL;
+
+    if (skip_next_frame)
+    {
+      // Reactive counter already decided to skip (real > virtual); reset debt
+      // so the predictive doesn't also fire on the very next rendered frame.
+      smart_debt_us = 0;
+    }
+    else if (num_skipped_frames < option_frameskip_value &&
+             smart_debt_us >= 16667LL)
+    {
+      skip_next_frame = 1;
+      num_skipped_frames++;
+      smart_debt_us -= 16667LL;
+    }
+  }
+
+  // Record end-of-sync time AFTER any vblank wait so that next frame's
+  // compute-time measurement excludes idle time spent waiting for vsync.
+  last_sync_end_us = ticker();
 
   if (used_frameskip_type == FRAMESKIP_MANUAL)
   {
@@ -740,8 +789,34 @@ static void load_setting_cfg(void)
 
   if (load_dir_cfg(filename) < 0)
   {
-    sprintf(filename, MSG[MSG_ERR_LOAD_DIR_INI], main_path);
-    error_msg(filename, CONFIRMATION_CONT);
+    // dir.ini missing — create it with sensible defaults so the user
+    // never sees this error again on subsequent boots
+    FILE *f = fopen(filename, "w");
+    if (f)
+    {
+      fprintf(f, "# ToadGBA directory config\n");
+      fprintf(f, "# Edit this file or use System > Directories in the emulator menu\n\n");
+      fprintf(f, "rom_directory = roms\n\n");
+      fprintf(f, "save_directory = save\n\n");
+      fprintf(f, "save_state_directory = state\n\n");
+      fprintf(f, "game_config_directory = cfg\n\n");
+      fprintf(f, "snapshot_directory = ms0:/PICTURE\n\n");
+      fprintf(f, "cheat_directory = cheat\n\n");
+      fprintf(f, "overlay_directory = overlays\n");
+      fclose(f);
+
+      // Also create the subdirectories so they exist from the start
+      char subdir[MAX_PATH];
+      const char *subdirs[] = { "roms", "save", "state", "cfg", "cheat", "overlays", NULL };
+      for (int i = 0; subdirs[i]; i++) {
+        sprintf(subdir, "%s%s", main_path, subdirs[i]);
+        sceIoMkdir(subdir, 0777);
+      }
+
+      // Reload now that the file exists
+      load_dir_cfg(filename);
+    }
+    // If we still couldn't create it, silently use defaults — no popup
   }
 }
 
@@ -819,16 +894,10 @@ int user_main(int argc, char *argv[])
   init_overlays_at_boot();
   
   // Initialize recent games tracking
-  extern void load_recent_games(void);
   load_recent_games();
-  
+
   // Load initial overlay if one is selected
   if (option_overlay_selected > 0 && option_overlay_selected < 10) {
-    extern void load_overlay(const char *filename);
-    extern char overlay_names[][64];
-    extern int overlay_needs_update;
-    
-    
     load_overlay(overlay_names[option_overlay_selected]);
     overlay_needs_update = 1; // Ensure overlay gets rendered
   }
@@ -899,15 +968,39 @@ int user_main(int argc, char *argv[])
     }
     else
     {
-      // Construct full path when loading from file browser
-      char full_game_path[MAX_PATH];
-      sprintf(full_game_path, "%s%s", dir_roms, load_filename);
-      
-      if (load_gamepak(full_game_path) < 0)
+      // load_file() sets cwd to the directory containing the selected file and writes
+      // either a bare filename (normal pick) or a full path (recent game) into load_filename.
+      // Pass it straight to load_gamepak — same as menu_load_file() does.
+      if (load_gamepak(load_filename) < 0)
       {
         clear_screen(COLOR32_BLACK);
         error_msg(MSG[MSG_ERR_LOAD_GAMEPACK], CONFIRMATION_CONT);
         menu();
+      }
+      else
+      {
+        // Add to recent games list. Build the full absolute path the same way
+        // menu_load_file() does: use getcwd() for normal picks (cwd = game dir),
+        // use load_filename directly if it is already an absolute path (recent game).
+        char full_game_path[MAX_PATH];
+        if (load_filename[0] == '/' || strstr(load_filename, ":/"))
+        {
+          strcpy(full_game_path, load_filename);
+        }
+        else
+        {
+          if (getcwd(full_game_path, MAX_PATH) != NULL)
+          {
+            u32 len = strlen(full_game_path);
+            if (full_game_path[len - 1] != '/') { full_game_path[len] = '/'; full_game_path[len + 1] = '\0'; }
+            strcat(full_game_path, load_filename);
+          }
+          else
+          {
+            sprintf(full_game_path, "%s/%s", dir_roms, load_filename);
+          }
+        }
+        add_recent_game(full_game_path);
       }
     }
   }
@@ -1186,13 +1279,13 @@ SceUID psp_fopen(const char *filename, const char *mode)
   return tag;
 }
 
-void psp_fclose(SceUID filename_tag)
+void psp_fclose(SceUID *filename_tag)
 {
-  if (filename_tag < 0)
+  if (*filename_tag < 0)
     return;
 
-  sceIoClose(filename_tag);
-  filename_tag = -1;
+  sceIoClose(*filename_tag);
+  *filename_tag = -1;
 }
 
 

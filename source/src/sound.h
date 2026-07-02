@@ -31,7 +31,7 @@
 
 extern u32 sound_pause;
 
-extern u32 gbc_sound_update;
+extern volatile u32 gbc_sound_update;
 void update_gbc_sound(u32 cpu_ticks);
 
 void sound_timer(FIXED08_24 frequency_step, u8 channel);

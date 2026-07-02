@@ -22,6 +22,8 @@
 #define GUI_H
 
 
+extern char overlay_names[MAX_OVERLAYS][64];
+
 extern char dir_roms[MAX_PATH];
 extern char dir_save[MAX_PATH];
 extern char dir_state[MAX_PATH];
@@ -31,6 +33,7 @@ extern char dir_cheat[MAX_PATH];
 extern char dir_overlay[MAX_PATH];
 
 s32 load_file(const char **wildcards, char *result, char *default_dir_name);
+void add_recent_game(const char *game_path);
 
 s32 load_game_config_file(void);
 s32 load_config_file(void);

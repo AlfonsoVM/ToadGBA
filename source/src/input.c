@@ -216,10 +216,10 @@ GUI_ACTION_TYPE get_gui_input(void)
     new_button = CURSOR_DEFAULT;
 
   if ((new_buttons & PSP_CTRL_CIRCLE) != 0)
-    new_button = (option_button_mapping == 0) ? CURSOR_EXIT : CURSOR_SELECT;
+    new_button = (option_button_mapping == 0) ? CURSOR_SELECT : CURSOR_EXIT;
 
   if ((new_buttons & PSP_CTRL_CROSS) != 0)
-    new_button = (option_button_mapping == 0) ? CURSOR_SELECT : CURSOR_EXIT;
+    new_button = (option_button_mapping == 0) ? CURSOR_EXIT : CURSOR_SELECT;
 
   if ((new_buttons & PSP_CTRL_SQUARE) != 0)
     new_button = CURSOR_BACK;
@@ -360,23 +360,15 @@ u32 update_input(void)
   // Check for SELECT + Triangle combination to toggle fast path
   if ((buttons & PSP_CTRL_SELECT) && (non_repeat_buttons & PSP_CTRL_TRIANGLE))
   {
-    extern u32 fast_path_enabled;
     fast_path_enabled ^= 1;
     return 0;
   }
 
-  // Check for SELECT + Circle combination to toggle layer merging
-  if ((buttons & PSP_CTRL_SELECT) && (non_repeat_buttons & PSP_CTRL_CIRCLE))
-  {
-    extern u32 layer_merge_enabled;
-    layer_merge_enabled ^= 1;
-    return 0;
-  }
 
   if ((enable_home_menu != 0) && ((non_repeat_buttons & PSP_CTRL_HOME) != 0))
   {
     // Safety wrapper for HOME button menu call to help debug crashes
-    /*FILE *debug_log = fopen("froggba_debug.log", "a");
+    /*FILE *debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "HOME button pressed - calling menu() safely\n");
       fflush(debug_log);
@@ -385,7 +377,7 @@ u32 update_input(void)
     
     u32 menu_result = menu();
     
-    /*debug_log = fopen("froggba_debug.log", "a");
+    /*debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "menu() returned: %lu\n", (unsigned long)menu_result);
       fflush(debug_log);
@@ -399,7 +391,7 @@ u32 update_input(void)
       sceKernelDelayThread(16000); // ~16ms delay (1/60th second)
     } while ((ctrl_wait.Buttons & PSP_CTRL_HOME) != 0);
     
-    /*debug_log = fopen("froggba_debug.log", "a");
+    /*debug_log = fopen("toadgba_debug.log", "a");
     if (debug_log) {
       fprintf(debug_log, "HOME button released, returning result: %lu\n", (unsigned long)menu_result);
       fflush(debug_log);
@@ -461,7 +453,14 @@ u32 update_input(void)
 
       if (button_id < BUTTON_ID_MENU)
       {
-        new_key |= button_id_to_gba_mask[button_id];
+        // Apply button mapping: in O/X mode (mapping==1), swap A and B
+        // so the physical layout matches what the menu uses
+        u32 mapped_id = button_id;
+        if (option_button_mapping == 1) {
+          if (button_id == BUTTON_ID_A) mapped_id = BUTTON_ID_B;
+          else if (button_id == BUTTON_ID_B) mapped_id = BUTTON_ID_A;
+        }
+        new_key |= button_id_to_gba_mask[mapped_id];
       }
       else
       {

@@ -29,13 +29,54 @@
 #define SCALED_USER   3
 
 // video filter type
-#define FILTER_NEAREST  0
-#define FILTER_BILINEAR 1
+#define FILTER_NEAREST        0
+#define FILTER_BILINEAR       1
+#define FILTER_SHARP_BILINEAR 2   // GPU 2x nearest upscale into buffer + GPU bilinear to screen
+
+// color correction modes
+#define COLOR_CORRECTION_OFF      0
+#define COLOR_CORRECTION_GPSP     1
+#define COLOR_CORRECTION_RETRO    2
+#define COLOR_CORRECTION_AGS101   3
+#define COLOR_CORRECTION_LCD_DIM  4
+#define COLOR_CORRECTION_COUNT    5
+
+// brightness adjustment (0=darkest, 4=normal, 8=brightest)
+#define BRIGHTNESS_MIN     0
+#define BRIGHTNESS_DEFAULT 4
+#define BRIGHTNESS_MAX     8
+
+// contrast adjustment (0=flat, 4=normal, 8=high contrast)
+#define CONTRAST_MIN     0
+#define CONTRAST_DEFAULT 4
+#define CONTRAST_MAX     8
+
+// saturation adjustment (0=grayscale, 8=normal, 16=vivid)
+#define SATURATION_MIN     0
+#define SATURATION_DEFAULT 8
+#define SATURATION_MAX     16
+
+// grid filter (0=off, 1=subtle horizontal, 2=full GBA grid)
+#define GRID_MIN     0
+#define GRID_DEFAULT 0
+#define GRID_MAX     2
+
+// per-channel RGB gain (0-8, 4=neutral/1.0x, 0=black, 8=2x)
+#define COLOR_RGB_MIN     0
+#define COLOR_RGB_DEFAULT 4
+#define COLOR_RGB_MAX     8
+
+// color temperature (0=warm/amber, 8=neutral, 16=cool/blue)
+#define COLORTEMP_MIN     0
+#define COLORTEMP_DEFAULT 8
+#define COLORTEMP_MAX     16
+#define COLORTEMP_STEP    8   // per-step shift in 8-bit space (±64 max ≈ ±25% range)
 
 // frameskip type
-#define FRAMESKIP_AUTO   0
-#define FRAMESKIP_MANUAL 1
-#define FRAMESKIP_NONE   2
+#define FRAMESKIP_AUTO   0   // reactive only (vblank counter)
+#define FRAMESKIP_MANUAL 1   // fixed interval skip
+#define FRAMESKIP_NONE   2   // no skipping
+#define FRAMESKIP_SMART  3   // reactive + predictive (ticker-based)
 
 // psp cpu clock frequency
 #define PSP_CLOCK_222 0
@@ -80,6 +121,14 @@ extern u32 sleep_flag;
 extern u32 synchronize_flag;
 extern u32 psp_fps_debug;
 extern u32 option_color_correction;
+extern u32 option_brightness;
+extern u32 option_contrast;
+extern u32 option_saturation;
+extern u32 option_colortemp;
+extern u32 option_grid;
+extern u32 option_color_r;
+extern u32 option_color_g;
+extern u32 option_color_b;
 extern u32 option_button_mapping;
 extern u32 option_resume_on_boot;
 extern u32 option_auto_save_state;
@@ -110,7 +159,7 @@ u32 file_length(char *filename);
 int set_cpu_clock(u32 psp_clock);
 
 SceUID psp_fopen(const char *filename, const char *mode);
-void psp_fclose(SceUID filename_tag);
+void psp_fclose(SceUID *filename_tag);
 
 void *safe_malloc(size_t size);
 

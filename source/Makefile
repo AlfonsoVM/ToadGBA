@@ -12,10 +12,10 @@ BUILD_PRX = 1
 ENCRYPT = 1
 
 PSP_FW_VERSION = 300
-PSP_LARGE_MEMORY = 0
+PSP_LARGE_MEMORY = 1
 
 PSP_EBOOT_ICON = res/ICON0.png
-PSP_EBOOT_TITLE = FrogGBA
+PSP_EBOOT_TITLE = ToadGBA
 
 EXTRA_TARGETS = EBOOT.PBP
 
@@ -34,7 +34,7 @@ OBJG = compress.o uncompr.o gzclose.o gzlib.o gzread.o gzwrite.o
 
 OBJS = $(MAINOBJS) $(OBJZ) $(OBJG)
 
-TARGET = FrogGBA
+TARGET = ToadGBA
 
 VPATH = src src/zlib
 
@@ -46,7 +46,7 @@ CFLAGS = \
  -fno-split-wide-types -fgcse-after-reload \
  -funroll-loops -fno-unwind-tables -fno-asynchronous-unwind-tables \
  -falign-functions=32 -falign-loops -falign-labels -falign-jumps \
- -ffast-math -fmerge-all-constants -funsafe-loop-optimizations -funsigned-char \
+ -ffast-math -fmerge-all-constants -funsigned-char \
  -finline-functions -fipa-cp -fipa-cp-clone -fmodulo-sched -fmodulo-sched-allow-regmoves \
  -fforce-addr \
  -Wall -Wundef -Wpointer-arith -Wbad-function-cast -Wwrite-strings -Wmissing-prototypes -Wsign-compare \

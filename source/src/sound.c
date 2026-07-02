@@ -30,7 +30,7 @@
 
 u32 sound_pause = 0;
 
-u32 gbc_sound_update = 0;
+volatile u32 gbc_sound_update = 0;
 
 typedef enum
 {
@@ -118,7 +118,7 @@ volatile int sound_active = 0;
 static void fill_sound_buffer(s16 *stream, u16 length);
 static int sound_update_thread(SceSize args, void *argp);
 
-u8 sound_sleep = 0;
+volatile u8 sound_sleep = 0;
 static void sound_thread_wakeup(void);
 
 u32 sound_buffer_base = 0;
@@ -447,7 +447,7 @@ void sound_timer_queue(u8 channel)
   for (i = 0; i < 4; i++)
   {
     fifo[fifo_top] = fifo_data[i];
-    fifo_top = (fifo_top + 1) % 32;
+    fifo_top = (fifo_top + 1) & 31;
   }
 
   ds->fifo_top = fifo_top;
@@ -707,9 +707,8 @@ void sound_timer(FIXED08_24 frequency_step, u8 channel)
   sound_buffer[buffer_index + 0] += (current_sample * volume_left ) >> 22;    \
 
 #define GBC_SOUND_RENDER_SAMPLE_BOTH()                                        \
-  dest_sample = current_sample * ((volume_left + volume_right) >> 1) >> 22;   \
-  sound_buffer[buffer_index + 0] += dest_sample;                              \
-  sound_buffer[buffer_index + 1] += dest_sample;
+  sound_buffer[buffer_index + 0] += (current_sample * volume_left)  >> 22;   \
+  sound_buffer[buffer_index + 1] += (current_sample * volume_right) >> 22;
 #endif                                             \
 
 #define GBC_SOUND_RENDER_SAMPLES(type, sample_length, envelope_op, sweep_op)  \
@@ -826,7 +825,7 @@ void synchronize_sound(void)
   {
     if (SOUND_BUFFER_LENGTH > (SOUND_BUFFER_SIZE * 4))
     {
-      if (option_frameskip_type == FRAMESKIP_AUTO)
+      if (option_frameskip_type == FRAMESKIP_AUTO || option_frameskip_type == FRAMESKIP_SMART)
       {
         sceDisplayWaitVblankStart();
         real_frame_count = 0;
@@ -854,17 +853,22 @@ void update_gbc_sound(u32 cpu_ticks)
   s32 volume_left, volume_right;
   u32 envelope_volume;
 
-  s32 current_sample, dest_sample;
+  s32 current_sample;
   s8 *sample_data;
 
   u64 count_ticks = delta_ticks(cpu_ticks, gbc_sound_last_cpu_ticks) * SOUND_FREQUENCY;
 
   buffer_ticks = FP08_24_TO_U32(count_ticks);
-  
+
   // Early exit if no ticks to process
   if (buffer_ticks == 0) {
     return;
   }
+
+  // Cap to half the ring buffer to guard against pathological delta_ticks
+  // (e.g. after a reset or an unexpectedly large cpu_ticks jump)
+  if (buffer_ticks > RING_BUFFER_SIZE / 2)
+    buffer_ticks = RING_BUFFER_SIZE / 2;
   
   gbc_sound_partial_ticks += FP08_24_FRACTIONAL_PART(count_ticks);
 
@@ -1000,34 +1004,50 @@ void set_sound_volume(void)
 
 static void fill_sound_buffer(s16 *stream, u16 length)
 {
-  u32 i;
-  s16 current_sample;
+  /* Split at the ring-buffer wrap point so inner loops need no per-sample
+     mask operation.  With RING_BUFFER_SIZE=32768 and length=1600 there is
+     at most one wrap, so we handle at most two linear segments. */
+  u32 first = RING_BUFFER_SIZE - sound_buffer_base;
+  if (first > length) first = length;
+  u32 second = length - first;
 
   if ((option_sound_volume != 0) && (reg[CPU_HALT_STATE] != CPU_STOP))
   {
-    for (i = 0; i < length; i++)
+    u32 i;
+    s16 *src = sound_buffer + sound_buffer_base;
+
+    for (i = 0; i < first; i++)
     {
-      current_sample = sound_buffer[sound_buffer_base];
+      s16 s = src[i];
+      s = LIMIT_MAX(s,  2047);
+      s = LIMIT_MIN(s, -2048);
+      stream[i] = s << 4;
+    }
+    memset(src, 0, first * sizeof(s16));
 
-      current_sample = LIMIT_MAX(current_sample,  2047);
-      current_sample = LIMIT_MIN(current_sample, -2048);
-
-      stream[i] = current_sample << 4;
-      sound_buffer[sound_buffer_base] = 0;
-
-      sound_buffer_base = (sound_buffer_base + 1) & RING_BUFFER_MASK;
+    if (second)
+    {
+      for (i = 0; i < second; i++)
+      {
+        s16 s = sound_buffer[i];
+        s = LIMIT_MAX(s,  2047);
+        s = LIMIT_MIN(s, -2048);
+        stream[first + i] = s << 4;
+      }
+      memset(sound_buffer, 0, second * sizeof(s16));
     }
   }
   else
   {
-    for (i = 0; i < length; i++)
-    {
-      stream[i] = 0;
-      sound_buffer[sound_buffer_base] = 0;
-
-      sound_buffer_base = (sound_buffer_base + 1) & RING_BUFFER_MASK;
-    }
+    /* Muted: zero the output stream and clear consumed ring-buffer slots
+       so accumulated-but-unread samples do not bleed into future frames. */
+    memset(stream, 0, length * sizeof(s16));
+    memset(sound_buffer + sound_buffer_base, 0, first * sizeof(s16));
+    if (second)
+      memset(sound_buffer, 0, second * sizeof(s16));
   }
+
+  sound_buffer_base = (sound_buffer_base + length) & RING_BUFFER_MASK;
 }
 
 static void sound_thread_wakeup(void)
@@ -1059,8 +1079,6 @@ static int sound_update_thread(SceSize args, void *argp)
       sceKernelSleepThread();
 
       sound_sleep = 0;
-      // Reduced delay for faster response
-      sceKernelDelayThread(100);
       continue;
     }
 
