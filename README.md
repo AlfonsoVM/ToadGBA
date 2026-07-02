@@ -9,11 +9,18 @@
 
 **→ [Download the latest release here](https://github.com/AlfonsoVM/ToadGBA/releases) ←**
 
-You need custom firmware (CFW) on your PSP.
+You need custom firmware (CFW) on your PSP (e.g. CFW 6.61 LME or PRO-C2).
 
-1. Unzip the downloaded file.
-2. Copy the `PSP` folder to the root of your PSP memory card.
-3. Launch *ToadGBA* from the XMB game menu.
+The release contains two files: `EBOOT.PBP` and `ToadGBA.prx`.
+
+1. On your PSP memory card, create the folder **`/PSP/GAME/ToadGBA/`** if it doesn't exist.
+2. Copy both `EBOOT.PBP` and `ToadGBA.prx` into that folder.
+3. Eject the memory card and insert it into your PSP (or reconnect USB).
+4. Launch **ToadGBA** from the XMB game menu under *Game → Memory Stick*.
+
+> **Updating from a previous version?** Just overwrite `EBOOT.PBP` and `ToadGBA.prx`
+> in the same folder. Your saves, settings and overlays are kept separately and
+> won't be affected.
 
 ---
 
